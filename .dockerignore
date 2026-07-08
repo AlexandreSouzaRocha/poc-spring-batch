@@ -1,0 +1,12 @@
+target/
+data/
+.git/
+.gitignore
+.gitattributes
+.spec/
+docs/
+.idea/
+*.iml
+README.md
+Makefile
+docker-compose.yml

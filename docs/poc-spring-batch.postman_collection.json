@@ -1,0 +1,108 @@
+{
+  "info": {
+    "name": "POC Spring Batch → Kafka",
+    "description": "Endpoints da POC: gerar a massa de teste local e disparar o batch (fire-and-forget). A aplicação sobe em http://localhost:8081 (o kafka-ui usa a 8080).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8081",
+      "type": "string"
+    },
+    {
+      "key": "run",
+      "value": "poc",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Gerar arquivo de teste",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/data/generate?linesPerDigit=100000&recordLength=260",
+          "host": ["{{baseUrl}}"],
+          "path": ["data", "generate"],
+          "query": [
+            {
+              "key": "linesPerDigit",
+              "value": "100000",
+              "description": "Linhas por dígito (x10 arquivos = total). 100000 => 1MM."
+            },
+            {
+              "key": "recordLength",
+              "value": "260",
+              "description": "Bytes por linha (cenário real: 260)."
+            },
+            {
+              "key": "dir",
+              "value": "./data",
+              "description": "Diretório de saída. Omitido => usa app.input-dir.",
+              "disabled": true
+            },
+            {
+              "key": "date",
+              "value": "2026-07-07",
+              "description": "Data usada no layout da linha.",
+              "disabled": true
+            }
+          ]
+        },
+        "description": "Gera os 10 arquivos part_0.dat..part_9.dat (um por dígito verificador). Síncrono: retorna o resumo { files, totalLines, recordLength, directory, elapsedMs }."
+      },
+      "response": []
+    },
+    {
+      "name": "Disparar batch (fire-and-forget)",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/batch/trigger",
+          "host": ["{{baseUrl}}"],
+          "path": ["batch", "trigger"]
+        },
+        "description": "Dispara o saldoBatchJob em background e responde 202 imediatamente (não espera concluir). Sem o parâmetro 'run', cada disparo é uma execução nova."
+      },
+      "response": []
+    },
+    {
+      "name": "Disparar batch — retomar (run fixo)",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/batch/trigger?run={{run}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["batch", "trigger"],
+          "query": [
+            {
+              "key": "run",
+              "value": "{{run}}",
+              "description": "Reutilizar o mesmo 'run' + os mesmos arquivos retoma de onde parou (restart do JobInstance)."
+            }
+          ]
+        },
+        "description": "Mesmo endpoint, com 'run' explícito. Útil para testar a retomada: após uma falha, dispare de novo com o mesmo 'run' e as partições já concluídas são puladas."
+      },
+      "response": []
+    },
+    {
+      "name": "Health (actuator)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/actuator/health",
+          "host": ["{{baseUrl}}"],
+          "path": ["actuator", "health"]
+        },
+        "description": "Health check da aplicação (inclui mongo e kafka quando disponíveis)."
+      },
+      "response": []
+    }
+  ]
+}

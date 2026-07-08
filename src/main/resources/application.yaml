@@ -1,0 +1,50 @@
+spring:
+  application:
+    name: saldo.batch
+
+  threads:
+    virtual:
+      enabled: true
+
+  mongodb:
+    uri: ${SPRING_MONGODB_URI:mongodb://localhost:27017/saldo_batch?directConnection=true}
+    database: ${SPRING_MONGODB_DATABASE:saldo_batch}
+  data:
+    mongodb:
+      auto-index-creation: false
+
+  kafka:
+    bootstrap-servers: ${SPRING_KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+      acks: all
+      properties:
+        enable.idempotence: true
+        linger.ms: 20
+        batch.size: 65536
+        compression.type: lz4
+        max.in.flight.requests.per.connection: 5
+
+server:
+  port: ${SERVER_PORT:8081}
+
+app:
+  input-dir: ${APP_INPUT_DIR:./data}
+  chunk-size: ${APP_CHUNK_SIZE:5000}
+  partitions-per-file: ${APP_PARTITIONS_PER_FILE:8}
+  kafka-topic: ${APP_KAFKA_TOPIC:saldo-contas}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: always
+
+logging:
+  level:
+    org.springframework.batch: INFO
+    com.bradesco.saldo.batch: INFO

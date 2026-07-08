@@ -1,0 +1,101 @@
+services:
+  # ---------------------------------------------------------------------------
+  # Kafka (KRaft, single broker). Dual listeners:
+  #  - HOST://localhost:9092    -> app rodando no host
+  #  - INTERNAL://kafka:29092   -> outros containers (kafka-ui)
+  # ---------------------------------------------------------------------------
+  kafka:
+    image: confluentinc/cp-kafka:7.8.0
+    container_name: poc-kafka
+    hostname: kafka
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:29093
+      KAFKA_LISTENERS: INTERNAL://0.0.0.0:29092,CONTROLLER://0.0.0.0:29093,HOST://0.0.0.0:9092
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka:29092,HOST://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,INTERNAL:PLAINTEXT,HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_NUM_PARTITIONS: 10
+      CLUSTER_ID: 5L6g3nShT-eMCtK--X86sw
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-broker-api-versions --bootstrap-server localhost:9092 || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: poc-kafka-ui
+    ports:
+      - "8080:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
+      DYNAMIC_CONFIG_ENABLED: "true"
+    depends_on:
+      kafka:
+        condition: service_healthy
+
+  # ---------------------------------------------------------------------------
+  # MongoDB em replica set (rs0) — obrigatório para as transações multi-documento
+  # usadas pelo JobRepository do Spring Batch. O app conecta via
+  # localhost:27017 com directConnection=true (roda no host).
+  # ---------------------------------------------------------------------------
+  mongo:
+    image: mongo:7
+    container_name: poc-mongo
+    command: ["--replSet", "rs0", "--bind_ip_all"]
+    ports:
+      - "27017:27017"
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+
+  # Inicia o replica set (idempotente) e cria/seed das coleções BATCH_* + sequences.
+  mongo-init:
+    image: mongo:7
+    container_name: poc-mongo-init
+    depends_on:
+      mongo:
+        condition: service_healthy
+    volumes:
+      - ./docker/mongo-init.sh:/init/mongo-init.sh:ro
+    entrypoint: ["bash", "/init/mongo-init.sh"]
+    restart: "no"
+
+  # Aplicação Spring Batch. Endpoints em :8081. Métricas de execução saem no log
+  # (linha "METRICS ..."). Conecta ao kafka (INTERNAL) e ao mongo pela rede interna.
+  app:
+    build:
+      context: .
+    image: poc-saldo-batch:latest
+    container_name: poc-app
+    ports:
+      - "8081:8081"
+    environment:
+      SPRING_MONGODB_URI: mongodb://mongo:27017/saldo_batch?directConnection=true
+      SPRING_MONGODB_DATABASE: saldo_batch
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      APP_INPUT_DIR: /data
+      APP_CHUNK_SIZE: 5000
+      APP_PARTITIONS_PER_FILE: 8
+    volumes:
+      - ./data:/data
+    depends_on:
+      kafka:
+        condition: service_healthy
+      mongo:
+        condition: service_healthy
+      mongo-init:
+        condition: service_completed_successfully
