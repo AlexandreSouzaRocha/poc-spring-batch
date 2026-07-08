@@ -1,7 +1,10 @@
 package com.bradesco.saldo.batch.reader;
 
+import java.io.BufferedReader;
+import java.io.FileInputStream;
 import java.io.IOException;
-import java.io.RandomAccessFile;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
 
 import org.springframework.batch.core.configuration.annotation.StepScope;
 import org.springframework.batch.infrastructure.item.ExecutionContext;
@@ -15,12 +18,14 @@ import org.springframework.stereotype.Component;
 public class ByteRangeLineReader implements ItemStreamReader<String> {
 
     private static final String POSITION_KEY = "byteRangeReader.position";
+    private static final int BUFFER_SIZE = 1 << 16;
 
     private final String filePath;
     private final long startByte;
     private final long endByte;
 
-    private RandomAccessFile raf;
+    private BufferedReader reader;
+    private long position;
 
     public ByteRangeLineReader(
             @Value("#{stepExecutionContext['fileName']}") String filePath,
@@ -34,12 +39,21 @@ public class ByteRangeLineReader implements ItemStreamReader<String> {
     @Override
     public void open(ExecutionContext executionContext) throws ItemStreamException {
         try {
-            this.raf = new RandomAccessFile(filePath, "r");
-            if (executionContext.containsKey(POSITION_KEY)) {
-                raf.seek(executionContext.getLong(POSITION_KEY));
-            } else if (startByte > 0) {
-                raf.seek(startByte);
-                raf.readLine();
+            long from = executionContext.containsKey(POSITION_KEY)
+                    ? executionContext.getLong(POSITION_KEY)
+                    : startByte;
+
+            FileInputStream fis = new FileInputStream(filePath);
+            fis.getChannel().position(from);
+            reader = new BufferedReader(
+                    new InputStreamReader(fis, StandardCharsets.ISO_8859_1), BUFFER_SIZE);
+            position = from;
+
+            if (!executionContext.containsKey(POSITION_KEY) && startByte > 0) {
+                String partial = reader.readLine();
+                if (partial != null) {
+                    position += partial.length() + 1;
+                }
             }
         } catch (IOException e) {
             throw new ItemStreamException("Falha ao abrir partição do arquivo " + filePath, e);
@@ -48,32 +62,30 @@ public class ByteRangeLineReader implements ItemStreamReader<String> {
 
     @Override
     public String read() throws Exception {
-        if (raf.getFilePointer() > endByte) {
+        if (position > endByte) {
             return null;
         }
-        return raf.readLine();
+        String line = reader.readLine();
+        if (line != null) {
+            position += line.length() + 1;
+        }
+        return line;
     }
 
     @Override
     public void update(ExecutionContext executionContext) throws ItemStreamException {
-        if (raf != null) {
-            try {
-                executionContext.putLong(POSITION_KEY, raf.getFilePointer());
-            } catch (IOException e) {
-                throw new ItemStreamException("Falha ao salvar posição do reader", e);
-            }
-        }
+        executionContext.putLong(POSITION_KEY, position);
     }
 
     @Override
     public void close() throws ItemStreamException {
-        if (raf != null) {
+        if (reader != null) {
             try {
-                raf.close();
+                reader.close();
             } catch (IOException e) {
                 throw new ItemStreamException("Falha ao fechar arquivo " + filePath, e);
             } finally {
-                raf = null;
+                reader = null;
             }
         }
     }

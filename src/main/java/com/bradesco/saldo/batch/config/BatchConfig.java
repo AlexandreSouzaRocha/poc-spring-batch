@@ -2,6 +2,7 @@ package com.bradesco.saldo.batch.config;
 
 import java.util.concurrent.Executors;
 
+import com.bradesco.saldo.batch.listener.StepMetricsListener;
 import com.bradesco.saldo.batch.model.AccountRecord;
 import com.bradesco.saldo.batch.partition.InputFilesRangePartitioner;
 import com.bradesco.saldo.batch.processor.LineProcessor;
@@ -60,8 +61,10 @@ public class BatchConfig extends MongoDefaultBatchConfiguration {
     @Bean
     public InputFilesRangePartitioner partitioner(
             @Value("${app.input-dir}") String inputDir,
-            @Value("${app.partitions-per-file}") int partitionsPerFile) {
-        return new InputFilesRangePartitioner(inputDir, partitionsPerFile);
+            @Value("${app.partitions-per-file}") int partitionsPerFile,
+            @Value("${app.digit-from}") int digitFrom,
+            @Value("${app.digit-to}") int digitTo) {
+        return new InputFilesRangePartitioner(inputDir, partitionsPerFile, digitFrom, digitTo);
     }
 
     @Bean
@@ -70,6 +73,7 @@ public class BatchConfig extends MongoDefaultBatchConfiguration {
                            ByteRangeLineReader reader,
                            LineProcessor processor,
                            KafkaLineWriter writer,
+                           StepMetricsListener stepMetricsListener,
                            @Value("${app.chunk-size}") int chunkSize) {
         return new StepBuilder("workerStep", jobRepository)
                 .<String, AccountRecord>chunk(chunkSize)
@@ -80,6 +84,7 @@ public class BatchConfig extends MongoDefaultBatchConfiguration {
                 .faultTolerant()
                 .retryLimit(3)
                 .retry(RetriableException.class)
+                .listener(stepMetricsListener)
                 .build();
     }
 
@@ -88,6 +93,7 @@ public class BatchConfig extends MongoDefaultBatchConfiguration {
                            Step workerStep,
                            InputFilesRangePartitioner partitioner,
                            TaskExecutor partitionTaskExecutor,
+                           StepMetricsListener stepMetricsListener,
                            @Value("${app.partitions-per-file}") int partitionsPerFile) {
         TaskExecutorPartitionHandler handler = new TaskExecutorPartitionHandler();
         handler.setStep(workerStep);
@@ -101,6 +107,7 @@ public class BatchConfig extends MongoDefaultBatchConfiguration {
         return new StepBuilder("masterStep", jobRepository)
                 .partitioner("workerStep", partitioner)
                 .partitionHandler(handler)
+                .listener(stepMetricsListener)
                 .build();
     }
 

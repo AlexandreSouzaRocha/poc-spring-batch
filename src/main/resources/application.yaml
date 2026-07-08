@@ -32,8 +32,10 @@ server:
 app:
   input-dir: ${APP_INPUT_DIR:./data}
   chunk-size: ${APP_CHUNK_SIZE:5000}
-  partitions-per-file: ${APP_PARTITIONS_PER_FILE:8}
+  partitions-per-file: ${APP_PARTITIONS_PER_FILE:10}
   kafka-topic: ${APP_KAFKA_TOPIC:saldo-contas}
+  digit-from: ${APP_DIGIT_FROM:0}
+  digit-to: ${APP_DIGIT_TO:9}
 
 management:
   endpoints:

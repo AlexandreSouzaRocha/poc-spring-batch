@@ -74,13 +74,15 @@ services:
     entrypoint: ["bash", "/init/mongo-init.sh"]
     restart: "no"
 
-  # Aplicação Spring Batch. Endpoints em :8081. Métricas de execução saem no log
-  # (linha "METRICS ..."). Conecta ao kafka (INTERNAL) e ao mongo pela rede interna.
-  app:
+  # Aplicação Spring Batch, shardada em 2 containers pelo dígito verificador:
+  # app-1 processa part_0..4.dat (porta 8081), app-2 processa part_5..9.dat (8082).
+  # Ambos compartilham a mesma imagem, o volume ./data e a infra (kafka/mongo).
+  # Métricas de execução saem no log (linhas "METRICS"/"STEP_METRICS").
+  app-1:
     build:
       context: .
     image: poc-saldo-batch:latest
-    container_name: poc-app
+    container_name: poc-app-1
     ports:
       - "8081:8081"
     environment:
@@ -90,9 +92,37 @@ services:
       APP_INPUT_DIR: /data
       APP_CHUNK_SIZE: 5000
       APP_PARTITIONS_PER_FILE: 8
+      APP_DIGIT_FROM: 0
+      APP_DIGIT_TO: 4
     volumes:
       - ./data:/data
     depends_on:
+      kafka:
+        condition: service_healthy
+      mongo:
+        condition: service_healthy
+      mongo-init:
+        condition: service_completed_successfully
+
+  app-2:
+    image: poc-saldo-batch:latest
+    container_name: poc-app-2
+    ports:
+      - "8082:8081"
+    environment:
+      SPRING_MONGODB_URI: mongodb://mongo:27017/saldo_batch?directConnection=true
+      SPRING_MONGODB_DATABASE: saldo_batch
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      APP_INPUT_DIR: /data
+      APP_CHUNK_SIZE: 5000
+      APP_PARTITIONS_PER_FILE: 8
+      APP_DIGIT_FROM: 5
+      APP_DIGIT_TO: 9
+    volumes:
+      - ./data:/data
+    depends_on:
+      app-1:
+        condition: service_started
       kafka:
         condition: service_healthy
       mongo:
