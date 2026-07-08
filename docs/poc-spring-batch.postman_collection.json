@@ -1,13 +1,18 @@
 {
   "info": {
     "name": "POC Spring Batch → Kafka",
-    "description": "Endpoints da POC: gerar a massa de teste local e disparar o batch (fire-and-forget). A aplicação sobe em http://localhost:8081 (o kafka-ui usa a 8080).",
+    "description": "Endpoints da POC: gerar a massa de teste (Azure Blob/Azurite ou disco local) e disparar o batch (fire-and-forget). app-1 (dígitos 0-4) em :8081, app-2 (dígitos 5-9) em :8082 (o kafka-ui usa a 8080).",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
     {
-      "key": "baseUrl",
+      "key": "app1Url",
       "value": "http://localhost:8081",
+      "type": "string"
+    },
+    {
+      "key": "app2Url",
+      "value": "http://localhost:8082",
       "type": "string"
     },
     {
@@ -18,13 +23,13 @@
   ],
   "item": [
     {
-      "name": "Gerar arquivo de teste",
+      "name": "Gerar arquivo de teste (via app-1)",
       "request": {
         "method": "POST",
         "header": [],
         "url": {
-          "raw": "{{baseUrl}}/data/generate?linesPerDigit=100000&recordLength=260",
-          "host": ["{{baseUrl}}"],
+          "raw": "{{app1Url}}/data/generate?linesPerDigit=100000&recordLength=260",
+          "host": ["{{app1Url}}"],
           "path": ["data", "generate"],
           "query": [
             {
@@ -38,12 +43,6 @@
               "description": "Bytes por linha (cenário real: 260)."
             },
             {
-              "key": "dir",
-              "value": "./data",
-              "description": "Diretório de saída. Omitido => usa app.input-dir.",
-              "disabled": true
-            },
-            {
               "key": "date",
               "value": "2026-07-07",
               "description": "Data usada no layout da linha.",
@@ -51,53 +50,74 @@
             }
           ]
         },
-        "description": "Gera os 10 arquivos part_0.dat..part_9.dat (um por dígito verificador). Síncrono: retorna o resumo { files, totalLines, recordLength, directory, elapsedMs }."
+        "description": "Gera os 10 arquivos part_0.dat..part_9.dat (um por dígito verificador) no storage configurado (blob ou disco — ver APP_STORAGE). Como o storage é compartilhado entre app-1 e app-2, basta chamar em um dos dois. Síncrono: retorna { files, totalLines, recordLength, storage, elapsedMs }."
       },
       "response": []
     },
     {
-      "name": "Disparar batch (fire-and-forget)",
+      "name": "Disparar batch — app-1 (dígitos 0-4)",
       "request": {
         "method": "POST",
         "header": [],
         "url": {
-          "raw": "{{baseUrl}}/batch/trigger",
-          "host": ["{{baseUrl}}"],
-          "path": ["batch", "trigger"]
-        },
-        "description": "Dispara o saldoBatchJob em background e responde 202 imediatamente (não espera concluir). Sem o parâmetro 'run', cada disparo é uma execução nova."
-      },
-      "response": []
-    },
-    {
-      "name": "Disparar batch — retomar (run fixo)",
-      "request": {
-        "method": "POST",
-        "header": [],
-        "url": {
-          "raw": "{{baseUrl}}/batch/trigger?run={{run}}",
-          "host": ["{{baseUrl}}"],
+          "raw": "{{app1Url}}/batch/trigger?run={{run}}",
+          "host": ["{{app1Url}}"],
           "path": ["batch", "trigger"],
           "query": [
             {
               "key": "run",
               "value": "{{run}}",
-              "description": "Reutilizar o mesmo 'run' + os mesmos arquivos retoma de onde parou (restart do JobInstance)."
+              "description": "Reutilizar o mesmo 'run' retoma de onde parou. Omitir gera um run novo."
             }
           ]
         },
-        "description": "Mesmo endpoint, com 'run' explícito. Útil para testar a retomada: após uma falha, dispare de novo com o mesmo 'run' e as partições já concluídas são puladas."
+        "description": "Dispara o saldoBatchJob (partições dos dígitos 0-4) em background e responde 202 imediatamente."
       },
       "response": []
     },
     {
-      "name": "Health (actuator)",
+      "name": "Disparar batch — app-2 (dígitos 5-9)",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "url": {
+          "raw": "{{app2Url}}/batch/trigger?run={{run}}",
+          "host": ["{{app2Url}}"],
+          "path": ["batch", "trigger"],
+          "query": [
+            {
+              "key": "run",
+              "value": "{{run}}",
+              "description": "Pode reutilizar o mesmo valor do app-1: o job param 'shard' evita colisão de JobInstance entre os dois containers."
+            }
+          ]
+        },
+        "description": "Dispara o saldoBatchJob (partições dos dígitos 5-9) em background e responde 202 imediatamente."
+      },
+      "response": []
+    },
+    {
+      "name": "Health — app-1",
       "request": {
         "method": "GET",
         "header": [],
         "url": {
-          "raw": "{{baseUrl}}/actuator/health",
-          "host": ["{{baseUrl}}"],
+          "raw": "{{app1Url}}/actuator/health",
+          "host": ["{{app1Url}}"],
+          "path": ["actuator", "health"]
+        },
+        "description": "Health check da aplicação (inclui mongo e kafka quando disponíveis)."
+      },
+      "response": []
+    },
+    {
+      "name": "Health — app-2",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{app2Url}}/actuator/health",
+          "host": ["{{app2Url}}"],
           "path": ["actuator", "health"]
         },
         "description": "Health check da aplicação (inclui mongo e kafka quando disponíveis)."

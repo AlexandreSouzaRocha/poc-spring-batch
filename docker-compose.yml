@@ -62,6 +62,21 @@ services:
       timeout: 10s
       retries: 10
 
+  # Azure Blob Storage local (emulador). Blob endpoint em :10000.
+  azurite:
+    image: mcr.microsoft.com/azure-storage/azurite:latest
+    container_name: poc-azurite
+    command: ["azurite-blob", "--blobHost", "0.0.0.0", "--blobPort", "10000", "--skipApiVersionCheck", "--disableProductStyleUrl"]
+    ports:
+      - "10000:10000"
+    volumes:
+      - azurite-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"require('net').connect(10000,'127.0.0.1').on('connect',()=>process.exit(0)).on('error',()=>process.exit(1))\""]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
   # Inicia o replica set (idempotente) e cria/seed das coleções BATCH_* + sequences.
   mongo-init:
     image: mongo:7
@@ -76,7 +91,7 @@ services:
 
   # Aplicação Spring Batch, shardada em 2 containers pelo dígito verificador:
   # app-1 processa part_0..4.dat (porta 8081), app-2 processa part_5..9.dat (8082).
-  # Ambos compartilham a mesma imagem, o volume ./data e a infra (kafka/mongo).
+  # Os arquivos vêm do Azure Blob Storage (azurite), como em produção.
   # Métricas de execução saem no log (linhas "METRICS"/"STEP_METRICS").
   app-1:
     build:
@@ -85,17 +100,19 @@ services:
     container_name: poc-app-1
     ports:
       - "8081:8081"
-    environment:
+    environment: &app-env
       SPRING_MONGODB_URI: mongodb://mongo:27017/saldo_batch?directConnection=true
       SPRING_MONGODB_DATABASE: saldo_batch
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
-      APP_INPUT_DIR: /data
+      APP_STORAGE: blob
+      APP_BLOB_ENDPOINT: http://azurite:10000/devstoreaccount1
+      APP_BLOB_ACCOUNT_NAME: devstoreaccount1
+      APP_BLOB_ACCOUNT_KEY: "Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw=="
+      APP_BLOB_CONTAINER: saldo-files
       APP_CHUNK_SIZE: 5000
       APP_PARTITIONS_PER_FILE: 8
       APP_DIGIT_FROM: 0
       APP_DIGIT_TO: 4
-    volumes:
-      - ./data:/data
     depends_on:
       kafka:
         condition: service_healthy
@@ -103,6 +120,8 @@ services:
         condition: service_healthy
       mongo-init:
         condition: service_completed_successfully
+      azurite:
+        condition: service_healthy
 
   app-2:
     image: poc-saldo-batch:latest
@@ -110,16 +129,9 @@ services:
     ports:
       - "8082:8081"
     environment:
-      SPRING_MONGODB_URI: mongodb://mongo:27017/saldo_batch?directConnection=true
-      SPRING_MONGODB_DATABASE: saldo_batch
-      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
-      APP_INPUT_DIR: /data
-      APP_CHUNK_SIZE: 5000
-      APP_PARTITIONS_PER_FILE: 8
+      <<: *app-env
       APP_DIGIT_FROM: 5
       APP_DIGIT_TO: 9
-    volumes:
-      - ./data:/data
     depends_on:
       app-1:
         condition: service_started
@@ -129,3 +141,8 @@ services:
         condition: service_healthy
       mongo-init:
         condition: service_completed_successfully
+      azurite:
+        condition: service_healthy
+
+volumes:
+  azurite-data:

@@ -1,12 +1,16 @@
 package com.bradesco.saldo.batch.partition;
 
-import java.io.File;
-import java.util.Arrays;
+import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+
+import com.bradesco.saldo.batch.storage.InputStore;
+import com.bradesco.saldo.batch.storage.InputStore.StoredFile;
 
 import org.springframework.batch.core.partition.Partitioner;
 import org.springframework.batch.infrastructure.item.ExecutionContext;
@@ -15,17 +19,17 @@ public class InputFilesRangePartitioner implements Partitioner {
 
     private static final Pattern DIGIT_FILE = Pattern.compile("part_(\\d)\\.dat");
 
-    private final File inputDir;
+    private final InputStore store;
     private final int partitionsPerFile;
     private final int digitFrom;
     private final int digitTo;
 
-    public InputFilesRangePartitioner(String inputDir, int partitionsPerFile) {
-        this(inputDir, partitionsPerFile, 0, 9);
+    public InputFilesRangePartitioner(InputStore store, int partitionsPerFile) {
+        this(store, partitionsPerFile, 0, 9);
     }
 
-    public InputFilesRangePartitioner(String inputDir, int partitionsPerFile, int digitFrom, int digitTo) {
-        this.inputDir = new File(inputDir);
+    public InputFilesRangePartitioner(InputStore store, int partitionsPerFile, int digitFrom, int digitTo) {
+        this.store = store;
         this.partitionsPerFile = Math.max(1, partitionsPerFile);
         this.digitFrom = digitFrom;
         this.digitTo = digitTo;
@@ -33,15 +37,22 @@ public class InputFilesRangePartitioner implements Partitioner {
 
     @Override
     public Map<String, ExecutionContext> partition(int gridSize) {
-        File[] files = inputDir.listFiles((dir, name) -> matchesShard(name));
-        if (files == null || files.length == 0) {
-            throw new IllegalStateException("Nenhum arquivo *.dat encontrado em " + inputDir.getAbsolutePath()
+        List<StoredFile> files;
+        try {
+            files = store.listDataFiles().stream()
+                    .filter(f -> matchesShard(f.name()))
+                    .sorted(Comparator.comparing(StoredFile::name))
+                    .toList();
+        } catch (IOException e) {
+            throw new UncheckedIOException("Falha ao listar arquivos de entrada", e);
+        }
+        if (files.isEmpty()) {
+            throw new IllegalStateException("Nenhum arquivo *.dat encontrado no storage"
                     + " para o intervalo de dígitos [" + digitFrom + "-" + digitTo + "]");
         }
-        Arrays.sort(files, Comparator.comparing(File::getName));
 
         Map<String, ExecutionContext> partitions = new HashMap<>();
-        for (File file : files) {
+        for (StoredFile file : files) {
             long length = file.length();
             if (length == 0) {
                 continue;
@@ -55,10 +66,10 @@ public class InputFilesRangePartitioner implements Partitioner {
                 long end = (i == partitionsPerFile - 1) ? length : Math.min(length, (i + 1) * slice);
 
                 ExecutionContext context = new ExecutionContext();
-                context.putString("fileName", file.getAbsolutePath());
+                context.putString("fileName", file.name());
                 context.putLong("startByte", start);
                 context.putLong("endByte", end);
-                partitions.put(file.getName() + "#" + i, context);
+                partitions.put(file.name() + "#" + i, context);
             }
         }
         return partitions;

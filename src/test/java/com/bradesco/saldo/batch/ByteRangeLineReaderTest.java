@@ -9,6 +9,7 @@ import java.util.Map;
 
 import com.bradesco.saldo.batch.partition.InputFilesRangePartitioner;
 import com.bradesco.saldo.batch.reader.ByteRangeLineReader;
+import com.bradesco.saldo.batch.storage.LocalFileStore;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -28,16 +29,16 @@ class ByteRangeLineReaderTest {
             expected.add(line);
             content.append(line).append('\n');
         }
-        Path file = dir.resolve("part_0.dat");
-        Files.writeString(file, content.toString(), StandardCharsets.UTF_8);
+        Files.writeString(dir.resolve("part_0.dat"), content.toString(), StandardCharsets.UTF_8);
 
+        LocalFileStore store = new LocalFileStore(dir.toString());
         int partitionsPerFile = 8;
         Map<String, ExecutionContext> partitions =
-                new InputFilesRangePartitioner(dir.toString(), partitionsPerFile).partition(partitionsPerFile);
+                new InputFilesRangePartitioner(store, partitionsPerFile).partition(partitionsPerFile);
 
         List<String> actual = new ArrayList<>();
         for (ExecutionContext ctx : partitions.values()) {
-            actual.addAll(readPartition(ctx));
+            actual.addAll(readPartition(store, ctx));
         }
 
         expected.sort(String::compareTo);
@@ -46,9 +47,9 @@ class ByteRangeLineReaderTest {
         assertEquals(expected, actual, "conteúdo lido difere do arquivo original");
     }
 
-    private List<String> readPartition(ExecutionContext ctx) throws Exception {
+    private List<String> readPartition(LocalFileStore store, ExecutionContext ctx) throws Exception {
         ByteRangeLineReader reader = new ByteRangeLineReader(
-                ctx.getString("fileName"), ctx.getLong("startByte"), ctx.getLong("endByte"));
+                store, ctx.getString("fileName"), ctx.getLong("startByte"), ctx.getLong("endByte"));
         List<String> lines = new ArrayList<>();
         reader.open(new ExecutionContext());
         try {
@@ -71,8 +72,9 @@ class ByteRangeLineReaderTest {
         Path file = dir.resolve("part_0.dat");
         Files.writeString(file, content.toString(), StandardCharsets.UTF_8);
 
+        LocalFileStore store = new LocalFileStore(dir.toString());
         long end = Files.size(file);
-        ByteRangeLineReader reader = new ByteRangeLineReader(file.toString(), 0, end);
+        ByteRangeLineReader reader = new ByteRangeLineReader(store, "part_0.dat", 0, end);
         ExecutionContext ec = new ExecutionContext();
         reader.open(ec);
         for (int i = 0; i < 10; i++) {
@@ -81,7 +83,7 @@ class ByteRangeLineReaderTest {
         reader.update(ec);
         reader.close();
 
-        ByteRangeLineReader resumed = new ByteRangeLineReader(file.toString(), 0, end);
+        ByteRangeLineReader resumed = new ByteRangeLineReader(store, "part_0.dat", 0, end);
         resumed.open(ec);
         try {
             assertEquals("LINE-010", resumed.read(), "restart deve retomar da posição salva");

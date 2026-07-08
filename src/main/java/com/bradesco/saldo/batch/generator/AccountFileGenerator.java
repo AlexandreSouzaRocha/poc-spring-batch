@@ -5,8 +5,6 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -15,6 +13,7 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.stream.IntStream;
 
 import com.bradesco.saldo.batch.model.RecordLayout;
+import com.bradesco.saldo.batch.storage.InputStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -26,15 +25,19 @@ public class AccountFileGenerator {
     private static final int DIGITS = 10;
     private static final int BUFFER_SIZE = 1 << 20;
 
-    public record GenerationResult(int files, long totalLines, int recordLength,
-                                   String directory, long elapsedMs) {
+    private final InputStore store;
+
+    public AccountFileGenerator(InputStore store) {
+        this.store = store;
     }
 
-    public GenerationResult generate(long linesPerDigit, String directory, String date, int recordLength)
+    public record GenerationResult(int files, long totalLines, int recordLength,
+                                   String storage, long elapsedMs) {
+    }
+
+    public GenerationResult generate(long linesPerDigit, String date, int recordLength)
             throws IOException {
         int length = Math.max(RecordLayout.MEANINGFUL_LENGTH, recordLength);
-        Path dir = Path.of(directory);
-        Files.createDirectories(dir);
 
         byte[] header = (RecordLayout.PREFIX + date + RecordLayout.TIMESTAMP_LITERAL)
                 .getBytes(StandardCharsets.US_ASCII);
@@ -45,7 +48,7 @@ public class AccountFileGenerator {
         try {
             var futures = IntStream.range(0, DIGITS)
                     .<Future<?>>mapToObj(digit -> executor.submit(
-                            () -> writeDigitFile(dir, digit, linesPerDigit, header, length)))
+                            () -> writeDigitFile(digit, linesPerDigit, header, length)))
                     .toList();
             for (Future<?> future : futures) {
                 future.get();
@@ -61,20 +64,21 @@ public class AccountFileGenerator {
 
         long total = linesPerDigit * DIGITS;
         long elapsed = System.currentTimeMillis() - start;
-        log.info("Gerados {} arquivos, {} linhas ({} bytes/linha) em {} ({} ms)",
-                DIGITS, total, length, dir.toAbsolutePath(), elapsed);
-        return new GenerationResult(DIGITS, total, length, dir.toAbsolutePath().toString(), elapsed);
+        String storage = store.getClass().getSimpleName();
+        log.info("Gerados {} arquivos, {} linhas ({} bytes/linha) via {} ({} ms)",
+                DIGITS, total, length, storage, elapsed);
+        return new GenerationResult(DIGITS, total, length, storage, elapsed);
     }
 
-    private void writeDigitFile(Path dir, int digit, long linesPerDigit, byte[] header, int length) {
-        Path file = dir.resolve("part_" + digit + ".dat");
+    private void writeDigitFile(int digit, long linesPerDigit, byte[] header, int length) {
+        String name = "part_" + digit + ".dat";
         int fillerLength = length - RecordLayout.MEANINGFUL_LENGTH;
         ThreadLocalRandom rnd = ThreadLocalRandom.current();
         byte[] line = new byte[length + 1];
         byte[] filler = new byte[Math.max(0, fillerLength)];
         line[length] = '\n';
 
-        try (OutputStream out = new BufferedOutputStream(Files.newOutputStream(file), BUFFER_SIZE)) {
+        try (OutputStream out = new BufferedOutputStream(store.create(name), BUFFER_SIZE)) {
             for (long i = 0; i < linesPerDigit; i++) {
                 buildLine(line, header, filler, rnd, digit, fillerLength);
                 out.write(line);

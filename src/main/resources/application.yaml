@@ -30,7 +30,13 @@ server:
   port: ${SERVER_PORT:8081}
 
 app:
+  storage: ${APP_STORAGE:file}
   input-dir: ${APP_INPUT_DIR:./data}
+  blob:
+    endpoint: ${APP_BLOB_ENDPOINT:http://localhost:10000/devstoreaccount1}
+    account-name: ${APP_BLOB_ACCOUNT_NAME:devstoreaccount1}
+    account-key: ${APP_BLOB_ACCOUNT_KEY:Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==}
+    container: ${APP_BLOB_CONTAINER:saldo-files}
   chunk-size: ${APP_CHUNK_SIZE:5000}
   partitions-per-file: ${APP_PARTITIONS_PER_FILE:10}
   kafka-topic: ${APP_KAFKA_TOPIC:saldo-contas}

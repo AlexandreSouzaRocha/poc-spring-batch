@@ -7,6 +7,7 @@ import com.bradesco.saldo.batch.model.AccountRecord;
 import com.bradesco.saldo.batch.partition.InputFilesRangePartitioner;
 import com.bradesco.saldo.batch.processor.LineProcessor;
 import com.bradesco.saldo.batch.reader.ByteRangeLineReader;
+import com.bradesco.saldo.batch.storage.InputStore;
 import com.bradesco.saldo.batch.writer.KafkaLineWriter;
 import org.apache.kafka.common.errors.RetriableException;
 
@@ -60,11 +61,11 @@ public class BatchConfig extends MongoDefaultBatchConfiguration {
 
     @Bean
     public InputFilesRangePartitioner partitioner(
-            @Value("${app.input-dir}") String inputDir,
+            InputStore inputStore,
             @Value("${app.partitions-per-file}") int partitionsPerFile,
             @Value("${app.digit-from}") int digitFrom,
             @Value("${app.digit-to}") int digitTo) {
-        return new InputFilesRangePartitioner(inputDir, partitionsPerFile, digitFrom, digitTo);
+        return new InputFilesRangePartitioner(inputStore, partitionsPerFile, digitFrom, digitTo);
     }
 
     @Bean
