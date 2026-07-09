@@ -1,5 +1,7 @@
 package com.bradesco.saldo.batch.repository;
 
+import java.time.Duration;
+
 import com.mongodb.client.model.FindOneAndUpdateOptions;
 import com.mongodb.client.model.ReturnDocument;
 import org.bson.Document;
@@ -17,7 +19,14 @@ public class CustomSequenceIncrementer implements DataFieldMaxValueIncrementer {
     private static final String SEQUENCES_COLLECTION_NAME = "batch_sequences";
 
     private final RetryTemplate retryTemplate = new RetryTemplate(
-            RetryPolicy.builder().includes(DataIntegrityViolationException.class).build());
+            RetryPolicy.builder()
+                    .includes(DataIntegrityViolationException.class)
+                    .maxRetries(10)
+                    .delay(Duration.ofMillis(100))
+                    .multiplier(2.0)
+                    .maxDelay(Duration.ofSeconds(2))
+                    .jitter(Duration.ofMillis(50))
+                    .build());
 
     private final MongoOperations mongoOperations;
     private final String sequenceName;

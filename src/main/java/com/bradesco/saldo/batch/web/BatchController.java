@@ -39,8 +39,9 @@ public class BatchController {
     public ResponseEntity<GenerationResult> generate(
             @RequestParam(name = "linesPerDigit", defaultValue = "100000") long linesPerDigit,
             @RequestParam(name = "date", defaultValue = "2026-07-07") String date,
-            @RequestParam(name = "recordLength", defaultValue = "" + RecordLayout.RECORD_LENGTH) int recordLength)
+            @RequestParam(name = "recordLength", defaultValue = "" + RecordLayout.RECORD_LENGTH) int recordLength,
+            @RequestParam(name = "digit", required = false) Integer digit)
             throws IOException {
-        return ResponseEntity.ok(generator.generate(linesPerDigit, date, recordLength));
+        return ResponseEntity.ok(generator.generate(linesPerDigit, date, recordLength, digit));
     }
 }

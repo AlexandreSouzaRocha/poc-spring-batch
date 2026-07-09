@@ -160,7 +160,7 @@ public class FileProcessorConsumer {
 
         boolean hadDangling = false;
         for (StepExecution stepExecution : last.getStepExecutions()) {
-            if (stepExecution.getStatus() == BatchStatus.STARTED) {
+            if (stepExecution.getStatus().isRunning()) {
                 hadDangling = true;
                 stepExecution.setStatus(BatchStatus.FAILED);
                 stepExecution.setEndTime(LocalDateTime.now());
@@ -169,17 +169,18 @@ public class FileProcessorConsumer {
             }
         }
 
-        if (last.getStatus() == BatchStatus.STARTED) {
+        if (last.getStatus().isRunning()) {
             hadDangling = true;
             last.setStatus(BatchStatus.FAILED);
             last.setEndTime(LocalDateTime.now());
             last.setExitStatus(ExitStatus.FAILED);
-            jobRepository.update(last);
         }
 
         if (hadDangling) {
-            log.warn("Execução {} do arquivo {} tinha estado preso em STARTED (processo anterior morreu "
-                    + "no meio ou erro transiente na gravação da falha); marcado como FAILED para retomar",
+            jobRepository.update(last);
+            log.warn("Execução {} do arquivo {} tinha step(s)/execução presos em STARTING/STARTED/STOPPING "
+                    + "(processo anterior morreu no meio ou erro transiente na gravação da falha); "
+                    + "marcado como FAILED para retomar (snapshot embutido no job_execution atualizado)",
                     last.getId(), instance.getJobName());
         }
     }

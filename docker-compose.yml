@@ -61,7 +61,7 @@ services:
   azurite:
     image: mcr.microsoft.com/azure-storage/azurite:latest
     container_name: poc-azurite
-    command: ["azurite-blob", "--blobHost", "0.0.0.0", "--blobPort", "10000", "--skipApiVersionCheck", "--disableProductStyleUrl"]
+    command: ["azurite-blob", "--blobHost", "0.0.0.0", "--blobPort", "10000", "--skipApiVersionCheck", "--disableProductStyleUrl", "--location", "/data"]
     ports:
       - "10000:10000"
     volumes:
@@ -101,6 +101,7 @@ services:
       APP_BLOB_CONTAINER: saldo-files
       APP_CHUNK_SIZE: 5000
       APP_PARTITIONS_PER_FILE: 8
+      JAVA_TOOL_OPTIONS: "-Djdk.tracePinnedThreads=full -XX:MaxRAMPercentage=50.0 -XX:InitialRAMPercentage=30.0 --sun-misc-unsafe-memory-access=allow"
     depends_on: &app-depends
       kafka:
         condition: service_healthy

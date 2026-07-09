@@ -1,0 +1,116 @@
+services:
+  kafka:
+    cpuset: "10-11"
+    deploy:
+      resources:
+        limits:
+          cpus: "2"
+          memory: 2g
+
+  mongo:
+    deploy:
+      resources:
+        limits:
+          cpus: "2"
+          memory: 2g
+
+  app-1:
+    cpuset: "0"
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 2g
+        reservations:
+          cpus: "0.5"
+          memory: 1g
+  app-2:
+    cpuset: "1"
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 2g
+        reservations:
+          cpus: "0.5"
+          memory: 1g
+  app-3:
+    cpuset: "2"
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 2g
+        reservations:
+          cpus: "0.5"
+          memory: 1g
+  app-4:
+    cpuset: "3"
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 2g
+        reservations:
+          cpus: "0.5"
+          memory: 1g
+  app-5:
+    cpuset: "4"
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 2g
+        reservations:
+          cpus: "0.5"
+          memory: 1g
+  app-6:
+    cpuset: "5"
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 2g
+        reservations:
+          cpus: "0.5"
+          memory: 1g
+  app-7:
+    cpuset: "6"
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 2g
+        reservations:
+          cpus: "0.5"
+          memory: 1g
+  app-8:
+    cpuset: "7"
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 2g
+        reservations:
+          cpus: "0.5"
+          memory: 1g
+  app-9:
+    cpuset: "8"
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 2g
+        reservations:
+          cpus: "0.5"
+          memory: 1g
+  app-10:
+    cpuset: "9"
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 2g
+        reservations:
+          cpus: "0.5"
+          memory: 1g

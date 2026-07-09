@@ -22,7 +22,7 @@ spring:
       properties:
         enable.idempotence: true
         linger.ms: 20
-        batch.size: 65536
+        batch.size: 131072
         compression.type: lz4
         max.in.flight.requests.per.connection: 5
     consumer:
@@ -55,8 +55,8 @@ app:
     topic: ${APP_FILE_PROCESSOR_TOPIC:saldo-file-processor}
     dlq-topic: ${APP_FILE_PROCESSOR_DLQ_TOPIC:saldo-file-processor.dlq}
     group-id: ${APP_FILE_PROCESSOR_GROUP_ID:saldo-file-processor-group}
-    max-attempts: ${APP_FILE_PROCESSOR_MAX_ATTEMPTS:3}
-    retry-backoff-seconds: ${APP_FILE_PROCESSOR_RETRY_BACKOFF_SECONDS:5}
+    max-attempts: ${APP_FILE_PROCESSOR_MAX_ATTEMPTS:6}
+    retry-backoff-seconds: ${APP_FILE_PROCESSOR_RETRY_BACKOFF_SECONDS:10}
     lock-ttl-seconds: ${APP_FILE_PROCESSOR_LOCK_TTL_SECONDS:1800}
 
 management:

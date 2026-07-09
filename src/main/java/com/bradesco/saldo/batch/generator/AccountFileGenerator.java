@@ -46,6 +46,11 @@ public class AccountFileGenerator {
 
     public GenerationResult generate(long linesPerDigit, String date, int recordLength)
             throws IOException {
+        return generate(linesPerDigit, date, recordLength, null);
+    }
+
+    public GenerationResult generate(long linesPerDigit, String date, int recordLength, Integer onlyDigit)
+            throws IOException {
         int length = Math.max(RecordLayout.MEANINGFUL_LENGTH, recordLength);
 
         byte[] header = (RecordLayout.PREFIX + date + RecordLayout.TIMESTAMP_LITERAL)
@@ -53,11 +58,15 @@ public class AccountFileGenerator {
 
         String timestamp = Long.toString(System.currentTimeMillis());
 
+        int[] digits = onlyDigit == null
+                ? IntStream.range(0, DIGITS).toArray()
+                : new int[] { onlyDigit };
+
         long start = System.currentTimeMillis();
-        int threads = Math.min(DIGITS, Math.max(1, Runtime.getRuntime().availableProcessors()));
+        int threads = Math.min(digits.length, Math.max(1, Runtime.getRuntime().availableProcessors()));
         ExecutorService executor = Executors.newFixedThreadPool(threads);
         try {
-            var futures = IntStream.range(0, DIGITS)
+            var futures = IntStream.of(digits)
                     .<Future<?>>mapToObj(digit -> executor.submit(
                             () -> writeDigitFile(digit, linesPerDigit, header, length, timestamp)))
                     .toList();
@@ -73,12 +82,12 @@ public class AccountFileGenerator {
             executor.shutdown();
         }
 
-        long total = linesPerDigit * DIGITS;
+        long total = linesPerDigit * digits.length;
         long elapsed = System.currentTimeMillis() - start;
         String storage = store.getClass().getSimpleName();
         log.info("Gerados {} arquivos, {} linhas ({} bytes/linha) via {} ({} ms)",
-                DIGITS, total, length, storage, elapsed);
-        return new GenerationResult(DIGITS, total, length, storage, elapsed);
+                digits.length, total, length, storage, elapsed);
+        return new GenerationResult(digits.length, total, length, storage, elapsed);
     }
 
     private void writeDigitFile(int digit, long linesPerDigit, byte[] header, int length, String timestamp) {
