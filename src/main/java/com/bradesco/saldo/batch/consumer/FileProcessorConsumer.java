@@ -4,8 +4,10 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.Comparator;
 import java.util.List;
+import java.util.UUID;
 
 import com.bradesco.saldo.batch.storage.InputStore;
+import com.bradesco.saldo.batch.support.DistributedLock;
 import com.bradesco.saldo.batch.support.MongoRetry;
 
 import org.slf4j.Logger;
@@ -39,6 +41,8 @@ public class FileProcessorConsumer {
     private final JobRepository jobRepository;
     private final InputStore store;
     private final KafkaTemplate<String, String> kafkaTemplate;
+    private final DistributedLock lock;
+    private final String ownerId;
     private final String dlqTopic;
     private final int maxAttempts;
     private final Duration retryBackoff;
@@ -48,6 +52,7 @@ public class FileProcessorConsumer {
                                  JobRepository jobRepository,
                                  InputStore store,
                                  KafkaTemplate<String, String> kafkaTemplate,
+                                 DistributedLock lock,
                                  @Value("${app.file-processor.dlq-topic}") String dlqTopic,
                                  @Value("${app.file-processor.max-attempts}") int maxAttempts,
                                  @Value("${app.file-processor.retry-backoff-seconds}") long retryBackoffSeconds) {
@@ -56,6 +61,8 @@ public class FileProcessorConsumer {
         this.jobRepository = jobRepository;
         this.store = store;
         this.kafkaTemplate = kafkaTemplate;
+        this.lock = lock;
+        this.ownerId = System.getenv().getOrDefault("HOSTNAME", UUID.randomUUID().toString());
         this.dlqTopic = dlqTopic;
         this.maxAttempts = maxAttempts;
         this.retryBackoff = Duration.ofSeconds(retryBackoffSeconds);
@@ -63,6 +70,19 @@ public class FileProcessorConsumer {
 
     @KafkaListener(topics = "${app.file-processor.topic}", groupId = "${app.file-processor.group-id}")
     public void onFileReady(String fileName, Acknowledgment ack) {
+        if (!lock.tryAcquire(fileName, ownerId)) {
+            log.info("Arquivo {} está com lock ativo em outro container; retentando", fileName);
+            ack.nack(retryBackoff);
+            return;
+        }
+        try {
+            processFile(fileName, ack);
+        } finally {
+            lock.release(fileName, ownerId);
+        }
+    }
+
+    private void processFile(String fileName, Acknowledgment ack) {
         WorkingIdentity identity = resolveWorkingIdentity(fileName);
         if (identity == null) {
             log.error("CRÍTICO: {} variantes de identidade órfãs seguidas para {}; retentando "

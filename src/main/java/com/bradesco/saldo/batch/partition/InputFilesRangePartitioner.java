@@ -21,24 +21,13 @@ public class InputFilesRangePartitioner implements Partitioner {
     private final Predicate<String> fileFilter;
     private final String filterDescription;
 
-    public InputFilesRangePartitioner(InputStore store, int partitionsPerFile) {
-        this(store, partitionsPerFile, 0, 9);
-    }
-
-    public InputFilesRangePartitioner(InputStore store, int partitionsPerFile, int digitFrom, int digitTo) {
-        this(store, partitionsPerFile,
-                name -> FileNaming.matches(name) && FileNaming.extractDigit(name) >= digitFrom
-                        && FileNaming.extractDigit(name) <= digitTo,
-                "dígitos [" + digitFrom + "-" + digitTo + "]");
-    }
-
     public static InputFilesRangePartitioner forSingleFile(InputStore store, int partitionsPerFile, String fileName) {
         return new InputFilesRangePartitioner(store, partitionsPerFile,
                 fileName::equals, "arquivo '" + fileName + "'");
     }
 
-    private InputFilesRangePartitioner(InputStore store, int partitionsPerFile,
-                                       Predicate<String> fileFilter, String filterDescription) {
+    InputFilesRangePartitioner(InputStore store, int partitionsPerFile,
+                               Predicate<String> fileFilter, String filterDescription) {
         this.store = store;
         this.partitionsPerFile = Math.max(1, partitionsPerFile);
         this.fileFilter = fileFilter;

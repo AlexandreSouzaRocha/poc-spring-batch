@@ -40,7 +40,7 @@ make up         # sobe kafka, mongo (replica set), kafka-ui, azurite e 10 contai
 make generate                 # gera 1MM (100k/dígito), 260 bytes/linha, direto no blob
                                # -> publica os eventos -> processamento começa sozinho
 make consumer-group           # ver o rebalanceamento/lag por partição
-make metrics                  # métricas agregadas (job + masterStep) de todos os containers
+make metrics                  # métricas agregadas (job + fileMasterStep) de todos os containers
 ```
 `make help` lista todos os alvos. Acompanhe as mensagens no **kafka-ui**
 (http://localhost:8080, tópico `saldo-contas`).
@@ -51,12 +51,12 @@ Collection do Postman em [`docs/`](docs/). Resumo:
 | Método | Endpoint | Descrição |
 |--------|----------|-----------|
 | `POST` | `/data/generate?linesPerDigit=100000&recordLength=260` | Gera os 10 arquivos de teste no blob **e dispara o processamento via evento** (síncrono; retorna resumo). |
-| `POST` | `/batch/trigger[?run=<id>]` | **[Manual/ad-hoc]** dispara o batch fire-and-forget para todos os arquivos alcançáveis. Sem `run` = execução nova; com `run` reutilizado = retomada. |
 | `POST` | `/batch/trigger-file?file=<nome>` | **[Manual/ad-hoc]** reprocessa um único arquivo (mesmo job usado pelo consumer). |
 | `GET`  | `/actuator/health` | Health da aplicação. |
 
-O fluxo automático é via evento (Kafka) — os endpoints `/batch/trigger*` existem só como
-**reprocessamento manual/operacional**, não são necessários no dia a dia.
+O fluxo automático é via evento (Kafka) — `/batch/trigger-file` existe só como
+**reprocessamento manual/operacional** (ex.: depois de corrigir um arquivo que caiu no DLQ),
+não é necessário no dia a dia.
 
 Para volumes grandes: `make generate LINES=20000000` (200MM total; ~50GB — atenção ao disco).
 
@@ -162,13 +162,13 @@ depois DLQ, lag da partição voltou a zero.
 Inspecionar metadados:
 ```bash
 docker exec -it poc-mongo mongosh saldo_batch \
-  --eval 'db.BATCH_STEP_EXECUTION.find({}, {stepName:1, status:1, writeCount:1}).toArray()'
+  --eval 'db.batch_step_execution.find({}, {name:1, status:1, write_count:1}).toArray()'
 make consumer-group   # partições, offsets e lag do consumer group
 make dlq               # mensagens no dead-letter topic
 ```
 
 ## Monitoria por step
-Cada partição (`workerStep`) e o agregado (`fileMasterStep`/`masterStep`) logam ao terminar:
+Cada partição (`workerStep`) e o agregado (`fileMasterStep`) logam ao terminar:
 ```
 STEP_METRICS step=workerStep:1720471234567_part_5.dat#7 jobExecutionId=5 status=COMPLETED durationSec=0.69 lidos=500 publicados=500 skips=0 tps=725
 STEP_METRICS step=fileMasterStep jobExecutionId=5 status=COMPLETED durationSec=1.84 lidos=50000 publicados=50000 skips=0 tps=27115
@@ -193,9 +193,9 @@ FileProcessorConsumer (@KafkaListener, ack manual)
      JobInstance identificado pelo nome do arquivo -> redelivery resume/idempotente.
      Falha persistente (N tentativas) -> errors/ + tópico .dlq, sem travar a partição.
 
-saldoFileJob                              saldoBatchJob (via /batch/trigger, manual)
-  └─ fileMasterStep (1 arquivo)             └─ masterStep (N arquivos por range de dígito)
-       └─ TaskExecutorPartitionHandler (virtual threads) — ambos reusam:
+saldoFileJob
+  └─ fileMasterStep (1 arquivo, particionado por byte-range)
+       └─ TaskExecutorPartitionHandler (virtual threads)
             └─ workerStep (chunk=5000, faultTolerant, restartável)
                  reader    ByteRangeLineReader  (lê a faixa via InputStore, salva offset p/ restart)
                  processor LineProcessor        (offsets fixos → key AAAA-CCCCCCC)

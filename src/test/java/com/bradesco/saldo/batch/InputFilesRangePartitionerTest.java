@@ -40,17 +40,4 @@ class InputFilesRangePartitionerTest {
         InputFilesRangePartitioner partitioner = InputFilesRangePartitioner.forSingleFile(store, 4, "part_9.dat");
         assertThrows(IllegalStateException.class, () -> partitioner.partition(4));
     }
-
-    @Test
-    void digitRangeModeStillWorks(@TempDir Path dir) throws Exception {
-        Files.writeString(dir.resolve("1720471234567_part_0.dat"), "a".repeat(500), StandardCharsets.US_ASCII);
-        Files.writeString(dir.resolve("1720471234567_part_5.dat"), "b".repeat(500), StandardCharsets.US_ASCII);
-        LocalFileStore store = new LocalFileStore(dir.toString());
-
-        Map<String, ExecutionContext> partitions =
-                new InputFilesRangePartitioner(store, 2, 0, 4).partition(2);
-
-        assertTrue(partitions.keySet().stream().allMatch(k -> k.startsWith("1720471234567_part_0.dat#")),
-                "range 0-4 não deve incluir part_5.dat");
-    }
 }

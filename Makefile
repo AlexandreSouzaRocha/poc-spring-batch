@@ -6,17 +6,15 @@
 #   make up        # sobe infra (kafka, mongo, azurite) + os 10 containers da app
 #   make generate  # gera a massa de teste no blob -> dispara o processamento sozinho
 #   make consumer-group  # ver a atribuição de partições (1 por container) e o lag
-#   make metrics   # métricas agregadas por container (job + masterStep)
-# O endpoint HTTP /batch/trigger (ou 'make trigger') continua disponível como
-# reprocessamento manual/ad-hoc — o fluxo automático é via evento, não precisa dele.
+#   make metrics   # métricas agregadas por container (job + fileMasterStep)
+# make trigger-file reprocessa manualmente um arquivo específico (ex.: após corrigir
+# um arquivo que caiu no DLQ) — o fluxo normal é 100% automático via evento.
 
 # LINES = linhas por dígito (x10 = total) | RECORD = bytes por linha
-# RUN   = id de execução do /batch/trigger manual; vazio = execução nova
 APP1_URL      ?= http://localhost:8081
 APPS          := app-1 app-2 app-3 app-4 app-5 app-6 app-7 app-8 app-9 app-10
 LINES         ?= 100000
 RECORD        ?= 260
-RUN           ?=
 FILE          ?=
 BLOB_ACCOUNT  := devstoreaccount1
 BLOB_KEY      := Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==
@@ -27,7 +25,7 @@ MVN           := ./mvnw
 
 .DEFAULT_GOAL := help
 
-.PHONY: help up up-infra down restart logs app-logs metrics metrics-partitions consumer-group dlq ps build test run generate trigger trigger-file blob-ls blob-cat clean
+.PHONY: help up up-infra down restart logs app-logs metrics metrics-partitions consumer-group dlq ps build test run generate trigger-file blob-ls blob-cat clean
 
 help: ## Lista os alvos disponíveis
 	@grep -E '^[a-zA-Z0-9_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -52,8 +50,8 @@ logs: ## Segue os logs de toda a stack
 app-logs: ## Segue os logs dos 10 containers da app
 	docker compose logs -f $(APPS)
 
-metrics: ## Métricas de execução por container (job + masterStep; agregadas)
-	docker compose logs $(APPS) 2>&1 | grep -E "METRICS job=|STEP_METRICS step=masterStep|STEP_METRICS step=fileMasterStep" || echo "nenhuma execução ainda"
+metrics: ## Métricas de execução por container (job + fileMasterStep; agregadas)
+	docker compose logs $(APPS) 2>&1 | grep -E "METRICS job=|STEP_METRICS step=fileMasterStep" || echo "nenhuma execução ainda"
 
 metrics-partitions: ## Métricas por partição (workerStep, uma linha por partição)
 	docker compose logs $(APPS) 2>&1 | grep "STEP_METRICS step=workerStep" || echo "nenhuma execução ainda"
@@ -80,9 +78,6 @@ run: ## Sobe o app local (foreground) contra a infra (use com 'make up-infra')
 ## ---------- Operação da POC ----------
 generate: ## Gera a massa de teste no Azure Blob (dispara o processamento automaticamente)
 	curl -fsS -X POST "$(APP1_URL)/data/generate?linesPerDigit=$(LINES)&recordLength=$(RECORD)"; echo
-
-trigger: ## [manual/ad-hoc] Dispara o batch (todos os dígitos 0-9, via 1 container só)
-	curl -fsS -X POST "$(APP1_URL)/batch/trigger$(if $(RUN),?run=$(RUN),)"; echo
 
 trigger-file: ## [manual/ad-hoc] Reprocessa um arquivo específico. Use FILE=<timestamp>_part_N.dat
 	curl -fsS -X POST "$(APP1_URL)/batch/trigger-file?file=$(FILE)"; echo

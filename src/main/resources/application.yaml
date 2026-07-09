@@ -51,14 +51,13 @@ app:
   chunk-size: ${APP_CHUNK_SIZE:5000}
   partitions-per-file: ${APP_PARTITIONS_PER_FILE:10}
   kafka-topic: ${APP_KAFKA_TOPIC:saldo-contas}
-  digit-from: ${APP_DIGIT_FROM:0}
-  digit-to: ${APP_DIGIT_TO:9}
   file-processor:
     topic: ${APP_FILE_PROCESSOR_TOPIC:saldo-file-processor}
     dlq-topic: ${APP_FILE_PROCESSOR_DLQ_TOPIC:saldo-file-processor.dlq}
     group-id: ${APP_FILE_PROCESSOR_GROUP_ID:saldo-file-processor-group}
     max-attempts: ${APP_FILE_PROCESSOR_MAX_ATTEMPTS:3}
     retry-backoff-seconds: ${APP_FILE_PROCESSOR_RETRY_BACKOFF_SECONDS:5}
+    lock-ttl-seconds: ${APP_FILE_PROCESSOR_LOCK_TTL_SECONDS:1800}
 
 management:
   endpoints:

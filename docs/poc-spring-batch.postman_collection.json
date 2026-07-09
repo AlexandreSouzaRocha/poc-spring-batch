@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "POC Spring Batch → Kafka",
-    "description": "Fluxo primário: gerar arquivo (POST /data/generate) publica evento no tópico saldo-file-processor, que dispara o processamento sozinho (consumer group, ack só após concluir). Os endpoints /batch/trigger* são reprocessamento manual/ad-hoc. app-1 em :8081, app-2 em :8082 (kafka-ui na 8080).",
+    "description": "Fluxo primário: gerar arquivo (POST /data/generate) publica evento no tópico saldo-file-processor, que dispara o processamento sozinho (consumer group, ack só após concluir). /batch/trigger-file é reprocessamento manual/ad-hoc de um arquivo específico. app-1 em :8081, app-2 em :8082 (kafka-ui na 8080).",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -13,11 +13,6 @@
     {
       "key": "app2Url",
       "value": "http://localhost:8082",
-      "type": "string"
-    },
-    {
-      "key": "run",
-      "value": "poc",
       "type": "string"
     },
     {
@@ -55,49 +50,7 @@
             }
           ]
         },
-        "description": "Gera os 10 arquivos <timestamp>_part_0.dat..part_9.dat (um por dígito verificador) no storage configurado (blob ou disco) e publica um evento por arquivo no tópico saldo-file-processor — app-1/app-2 processam sozinhos, sem precisar chamar /batch/trigger. Síncrono: retorna { files, totalLines, recordLength, storage, elapsedMs }."
-      },
-      "response": []
-    },
-    {
-      "name": "[Manual] Disparar batch — app-1 (todos os arquivos alcançáveis)",
-      "request": {
-        "method": "POST",
-        "header": [],
-        "url": {
-          "raw": "{{app1Url}}/batch/trigger?run={{run}}",
-          "host": ["{{app1Url}}"],
-          "path": ["batch", "trigger"],
-          "query": [
-            {
-              "key": "run",
-              "value": "{{run}}",
-              "description": "Reutilizar o mesmo 'run' retoma de onde parou. Omitir gera um run novo."
-            }
-          ]
-        },
-        "description": "Reprocessamento manual/ad-hoc: dispara o saldoBatchJob em background e responde 202. O fluxo automático é via evento (Kafka); este endpoint não é necessário no dia a dia."
-      },
-      "response": []
-    },
-    {
-      "name": "[Manual] Disparar batch — app-2",
-      "request": {
-        "method": "POST",
-        "header": [],
-        "url": {
-          "raw": "{{app2Url}}/batch/trigger?run={{run}}",
-          "host": ["{{app2Url}}"],
-          "path": ["batch", "trigger"],
-          "query": [
-            {
-              "key": "run",
-              "value": "{{run}}",
-              "description": "Pode reutilizar o mesmo valor do app-1: o job param 'shard' evita colisão de JobInstance entre os dois containers."
-            }
-          ]
-        },
-        "description": "Reprocessamento manual/ad-hoc via app-2."
+        "description": "Gera os 10 arquivos <timestamp>_part_0.dat..part_9.dat (um por dígito verificador) no storage configurado (blob ou disco) e publica um evento por arquivo no tópico saldo-file-processor — app-1/app-2 processam sozinhos. Síncrono: retorna { files, totalLines, recordLength, storage, elapsedMs }."
       },
       "response": []
     },

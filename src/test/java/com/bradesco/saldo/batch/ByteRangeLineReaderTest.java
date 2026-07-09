@@ -34,7 +34,8 @@ class ByteRangeLineReaderTest {
         LocalFileStore store = new LocalFileStore(dir.toString());
         int partitionsPerFile = 8;
         Map<String, ExecutionContext> partitions =
-                new InputFilesRangePartitioner(store, partitionsPerFile).partition(partitionsPerFile);
+                InputFilesRangePartitioner.forSingleFile(store, partitionsPerFile, "1720471234567_part_0.dat")
+                        .partition(partitionsPerFile);
 
         List<String> actual = new ArrayList<>();
         for (ExecutionContext ctx : partitions.values()) {

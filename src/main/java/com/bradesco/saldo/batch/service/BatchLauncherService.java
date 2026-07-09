@@ -9,7 +9,6 @@ import org.springframework.batch.core.job.parameters.JobParameters;
 import org.springframework.batch.core.job.parameters.JobParametersBuilder;
 import org.springframework.batch.core.launch.JobOperator;
 import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.task.TaskExecutor;
 import org.springframework.stereotype.Service;
 
@@ -19,35 +18,15 @@ public class BatchLauncherService {
     private static final Logger log = LoggerFactory.getLogger(BatchLauncherService.class);
 
     private final JobOperator jobOperator;
-    private final Job saldoBatchJob;
     private final Job saldoFileJob;
     private final TaskExecutor jobLaunchExecutor;
-    private final String inputDir;
-    private final String shard;
 
     public BatchLauncherService(JobOperator jobOperator,
-                                Job saldoBatchJob,
                                 Job saldoFileJob,
-                                @Qualifier("jobLaunchExecutor") TaskExecutor jobLaunchExecutor,
-                                @Value("${app.input-dir}") String inputDir,
-                                @Value("${app.digit-from}") int digitFrom,
-                                @Value("${app.digit-to}") int digitTo) {
+                                @Qualifier("jobLaunchExecutor") TaskExecutor jobLaunchExecutor) {
         this.jobOperator = jobOperator;
-        this.saldoBatchJob = saldoBatchJob;
         this.saldoFileJob = saldoFileJob;
         this.jobLaunchExecutor = jobLaunchExecutor;
-        this.inputDir = inputDir;
-        this.shard = digitFrom + "-" + digitTo;
-    }
-
-    public void launchAsync(String run) {
-        JobParameters parameters = new JobParametersBuilder()
-                .addString("inputDir", inputDir)
-                .addString("shard", shard)
-                .addString("run", run)
-                .toJobParameters();
-
-        jobLaunchExecutor.execute(() -> runAndLog(saldoBatchJob, parameters, "saldoBatchJob run=" + run));
     }
 
     public void launchFileAsync(String fileName) {

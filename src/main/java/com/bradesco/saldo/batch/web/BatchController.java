@@ -25,17 +25,6 @@ public class BatchController {
         this.generator = generator;
     }
 
-    @PostMapping("/batch/trigger")
-    public ResponseEntity<Map<String, String>> trigger(
-            @RequestParam(name = "run", required = false) String run) {
-        String runId = (run == null || run.isBlank()) ? "run-" + System.currentTimeMillis() : run;
-        batchLauncher.launchAsync(runId);
-        return ResponseEntity.accepted().body(Map.of(
-                "status", "ACCEPTED",
-                "job", "saldoBatchJob",
-                "run", runId));
-    }
-
     @PostMapping("/batch/trigger-file")
     public ResponseEntity<Map<String, String>> triggerFile(
             @RequestParam(name = "file") String fileName) {

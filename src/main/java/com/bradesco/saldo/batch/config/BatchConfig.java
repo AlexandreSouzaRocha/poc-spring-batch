@@ -7,10 +7,13 @@ import com.bradesco.saldo.batch.model.AccountRecord;
 import com.bradesco.saldo.batch.partition.InputFilesRangePartitioner;
 import com.bradesco.saldo.batch.processor.LineProcessor;
 import com.bradesco.saldo.batch.reader.ByteRangeLineReader;
+import com.bradesco.saldo.batch.repository.CustomJobRepositoryFactoryBean;
 import com.bradesco.saldo.batch.storage.InputStore;
 import com.bradesco.saldo.batch.writer.KafkaLineWriter;
+import jakarta.annotation.Nonnull;
 import org.apache.kafka.common.errors.RetriableException;
 
+import org.springframework.batch.core.configuration.BatchConfigurationException;
 import org.springframework.batch.core.configuration.annotation.JobScope;
 import org.springframework.batch.core.configuration.support.MongoDefaultBatchConfiguration;
 import org.springframework.batch.core.job.Job;
@@ -38,6 +41,24 @@ public class BatchConfig extends MongoDefaultBatchConfiguration {
     }
 
     @Bean
+    @Override
+    @Nonnull
+    public JobRepository jobRepository() throws BatchConfigurationException {
+        var factoryBean = new CustomJobRepositoryFactoryBean();
+        try {
+            factoryBean.setMongoOperations(getMongoOperations());
+            factoryBean.setTransactionManager(getTransactionManager());
+            factoryBean.setIsolationLevelForCreateEnum(getIsolationLevelForCreate());
+            factoryBean.setValidateTransactionState(getValidateTransactionState());
+            factoryBean.setJobKeyGenerator(getJobKeyGenerator());
+            factoryBean.afterPropertiesSet();
+            return factoryBean.getObject();
+        } catch (Exception e) {
+            throw new BatchConfigurationException("Unable to configure the custom job repository", e);
+        }
+    }
+
+    @Bean
     static BeanPostProcessor mongoMapKeyDotReplacement() {
         return new BeanPostProcessor() {
             @Override
@@ -61,15 +82,6 @@ public class BatchConfig extends MongoDefaultBatchConfiguration {
     }
 
     @Bean
-    public InputFilesRangePartitioner partitioner(
-            InputStore inputStore,
-            @Value("${app.partitions-per-file}") int partitionsPerFile,
-            @Value("${app.digit-from}") int digitFrom,
-            @Value("${app.digit-to}") int digitTo) {
-        return new InputFilesRangePartitioner(inputStore, partitionsPerFile, digitFrom, digitTo);
-    }
-
-    @Bean
     public Step workerStep(JobRepository jobRepository,
                            MongoTransactionManager transactionManager,
                            ByteRangeLineReader reader,
@@ -87,36 +99,6 @@ public class BatchConfig extends MongoDefaultBatchConfiguration {
                 .retryLimit(3)
                 .retry(RetriableException.class)
                 .listener(stepMetricsListener)
-                .build();
-    }
-
-    @Bean
-    public Step masterStep(JobRepository jobRepository,
-                           Step workerStep,
-                           InputFilesRangePartitioner partitioner,
-                           TaskExecutor partitionTaskExecutor,
-                           StepMetricsListener stepMetricsListener,
-                           @Value("${app.partitions-per-file}") int partitionsPerFile) {
-        TaskExecutorPartitionHandler handler = new TaskExecutorPartitionHandler();
-        handler.setStep(workerStep);
-        handler.setTaskExecutor(partitionTaskExecutor);
-        handler.setGridSize(partitionsPerFile);
-        try {
-            handler.afterPropertiesSet();
-        } catch (Exception e) {
-            throw new IllegalStateException("Falha ao configurar o partition handler", e);
-        }
-        return new StepBuilder("masterStep", jobRepository)
-                .partitioner("workerStep", partitioner)
-                .partitionHandler(handler)
-                .listener(stepMetricsListener)
-                .build();
-    }
-
-    @Bean
-    public Job saldoBatchJob(JobRepository jobRepository, Step masterStep) {
-        return new JobBuilder("saldoBatchJob", jobRepository)
-                .start(masterStep)
                 .build();
     }
 
