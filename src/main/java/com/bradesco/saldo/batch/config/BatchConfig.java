@@ -11,6 +11,7 @@ import com.bradesco.saldo.batch.storage.InputStore;
 import com.bradesco.saldo.batch.writer.KafkaLineWriter;
 import org.apache.kafka.common.errors.RetriableException;
 
+import org.springframework.batch.core.configuration.annotation.JobScope;
 import org.springframework.batch.core.configuration.support.MongoDefaultBatchConfiguration;
 import org.springframework.batch.core.job.Job;
 import org.springframework.batch.core.job.builder.JobBuilder;
@@ -116,6 +117,45 @@ public class BatchConfig extends MongoDefaultBatchConfiguration {
     public Job saldoBatchJob(JobRepository jobRepository, Step masterStep) {
         return new JobBuilder("saldoBatchJob", jobRepository)
                 .start(masterStep)
+                .build();
+    }
+
+    @Bean
+    @JobScope
+    public InputFilesRangePartitioner fileEventPartitioner(
+            InputStore inputStore,
+            @Value("${app.partitions-per-file}") int partitionsPerFile,
+            @Value("#{jobParameters['inputFile']}") String inputFile) {
+        return InputFilesRangePartitioner.forSingleFile(inputStore, partitionsPerFile, inputFile);
+    }
+
+    @Bean
+    public Step fileMasterStep(JobRepository jobRepository,
+                               Step workerStep,
+                               InputFilesRangePartitioner fileEventPartitioner,
+                               TaskExecutor partitionTaskExecutor,
+                               StepMetricsListener stepMetricsListener,
+                               @Value("${app.partitions-per-file}") int partitionsPerFile) {
+        TaskExecutorPartitionHandler handler = new TaskExecutorPartitionHandler();
+        handler.setStep(workerStep);
+        handler.setTaskExecutor(partitionTaskExecutor);
+        handler.setGridSize(partitionsPerFile);
+        try {
+            handler.afterPropertiesSet();
+        } catch (Exception e) {
+            throw new IllegalStateException("Falha ao configurar o partition handler", e);
+        }
+        return new StepBuilder("fileMasterStep", jobRepository)
+                .partitioner("workerStep", fileEventPartitioner)
+                .partitionHandler(handler)
+                .listener(stepMetricsListener)
+                .build();
+    }
+
+    @Bean
+    public Job saldoFileJob(JobRepository jobRepository, Step fileMasterStep) {
+        return new JobBuilder("saldoFileJob", jobRepository)
+                .start(fileMasterStep)
                 .build();
     }
 }

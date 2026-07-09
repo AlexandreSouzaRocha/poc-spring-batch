@@ -36,6 +36,16 @@ public class BatchController {
                 "run", runId));
     }
 
+    @PostMapping("/batch/trigger-file")
+    public ResponseEntity<Map<String, String>> triggerFile(
+            @RequestParam(name = "file") String fileName) {
+        batchLauncher.launchFileAsync(fileName);
+        return ResponseEntity.accepted().body(Map.of(
+                "status", "ACCEPTED",
+                "job", "saldoFileJob",
+                "file", fileName));
+    }
+
     @PostMapping("/data/generate")
     public ResponseEntity<GenerationResult> generate(
             @RequestParam(name = "linesPerDigit", defaultValue = "100000") long linesPerDigit,

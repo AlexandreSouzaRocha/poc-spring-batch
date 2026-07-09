@@ -22,7 +22,7 @@ services:
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
-      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 5000
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
       KAFKA_NUM_PARTITIONS: 10
       CLUSTER_ID: 5L6g3nShT-eMCtK--X86sw
@@ -45,11 +45,6 @@ services:
       kafka:
         condition: service_healthy
 
-  # ---------------------------------------------------------------------------
-  # MongoDB em replica set (rs0) — obrigatório para as transações multi-documento
-  # usadas pelo JobRepository do Spring Batch. O app conecta via
-  # localhost:27017 com directConnection=true (roda no host).
-  # ---------------------------------------------------------------------------
   mongo:
     image: mongo:7
     container_name: poc-mongo
@@ -77,7 +72,6 @@ services:
       timeout: 5s
       retries: 12
 
-  # Inicia o replica set (idempotente) e cria/seed das coleções BATCH_* + sequences.
   mongo-init:
     image: mongo:7
     container_name: poc-mongo-init
@@ -89,10 +83,6 @@ services:
     entrypoint: ["bash", "/init/mongo-init.sh"]
     restart: "no"
 
-  # Aplicação Spring Batch, shardada em 2 containers pelo dígito verificador:
-  # app-1 processa part_0..4.dat (porta 8081), app-2 processa part_5..9.dat (8082).
-  # Os arquivos vêm do Azure Blob Storage (azurite), como em produção.
-  # Métricas de execução saem no log (linhas "METRICS"/"STEP_METRICS").
   app-1:
     build:
       context: .
@@ -111,9 +101,7 @@ services:
       APP_BLOB_CONTAINER: saldo-files
       APP_CHUNK_SIZE: 5000
       APP_PARTITIONS_PER_FILE: 8
-      APP_DIGIT_FROM: 0
-      APP_DIGIT_TO: 4
-    depends_on:
+    depends_on: &app-depends
       kafka:
         condition: service_healthy
       mongo:
@@ -128,21 +116,72 @@ services:
     container_name: poc-app-2
     ports:
       - "8082:8081"
-    environment:
-      <<: *app-env
-      APP_DIGIT_FROM: 5
-      APP_DIGIT_TO: 9
-    depends_on:
-      app-1:
-        condition: service_started
-      kafka:
-        condition: service_healthy
-      mongo:
-        condition: service_healthy
-      mongo-init:
-        condition: service_completed_successfully
-      azurite:
-        condition: service_healthy
+    environment: *app-env
+    depends_on: *app-depends
+
+  app-3:
+    image: poc-saldo-batch:latest
+    container_name: poc-app-3
+    ports:
+      - "8083:8081"
+    environment: *app-env
+    depends_on: *app-depends
+
+  app-4:
+    image: poc-saldo-batch:latest
+    container_name: poc-app-4
+    ports:
+      - "8084:8081"
+    environment: *app-env
+    depends_on: *app-depends
+
+  app-5:
+    image: poc-saldo-batch:latest
+    container_name: poc-app-5
+    ports:
+      - "8085:8081"
+    environment: *app-env
+    depends_on: *app-depends
+
+  app-6:
+    image: poc-saldo-batch:latest
+    container_name: poc-app-6
+    ports:
+      - "8086:8081"
+    environment: *app-env
+    depends_on: *app-depends
+
+  app-7:
+    image: poc-saldo-batch:latest
+    container_name: poc-app-7
+    ports:
+      - "8087:8081"
+    environment: *app-env
+    depends_on: *app-depends
+
+  app-8:
+    image: poc-saldo-batch:latest
+    container_name: poc-app-8
+    ports:
+      - "8088:8081"
+    environment: *app-env
+    depends_on: *app-depends
+
+  app-9:
+    image: poc-saldo-batch:latest
+    container_name: poc-app-9
+    ports:
+      - "8089:8081"
+    environment: *app-env
+    depends_on: *app-depends
+
+  app-10:
+    image: poc-saldo-batch:latest
+    container_name: poc-app-10
+    ports:
+      - "8090:8081"
+    environment: *app-env
+    depends_on: *app-depends
 
 volumes:
   azurite-data:

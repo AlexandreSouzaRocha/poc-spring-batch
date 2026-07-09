@@ -6,6 +6,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.List;
 import java.util.stream.Stream;
 
@@ -47,5 +48,12 @@ public class LocalFileStore implements InputStore {
     public OutputStream create(String name) throws IOException {
         Files.createDirectories(baseDir);
         return Files.newOutputStream(baseDir.resolve(name));
+    }
+
+    @Override
+    public void moveToErrorFolder(String name) throws IOException {
+        Path errorsDir = baseDir.resolve("errors");
+        Files.createDirectories(errorsDir);
+        Files.move(baseDir.resolve(name), errorsDir.resolve(name), StandardCopyOption.REPLACE_EXISTING);
     }
 }

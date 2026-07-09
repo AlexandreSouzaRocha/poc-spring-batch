@@ -25,6 +25,17 @@ spring:
         batch.size: 65536
         compression.type: lz4
         max.in.flight.requests.per.connection: 5
+    consumer:
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      enable-auto-commit: false
+      properties:
+        # generoso: só chamamos poll() de novo depois que o arquivo inteiro termina de processar
+        max.poll.interval.ms: 1800000
+        # member-id fixo por container: evita rebalance desnecessário em restart rápido
+        group.instance.id: ${APP_CONSUMER_INSTANCE_ID:${HOSTNAME:local-instance}}
+    listener:
+      ack-mode: manual_immediate
 
 server:
   port: ${SERVER_PORT:8081}
@@ -42,6 +53,12 @@ app:
   kafka-topic: ${APP_KAFKA_TOPIC:saldo-contas}
   digit-from: ${APP_DIGIT_FROM:0}
   digit-to: ${APP_DIGIT_TO:9}
+  file-processor:
+    topic: ${APP_FILE_PROCESSOR_TOPIC:saldo-file-processor}
+    dlq-topic: ${APP_FILE_PROCESSOR_DLQ_TOPIC:saldo-file-processor.dlq}
+    group-id: ${APP_FILE_PROCESSOR_GROUP_ID:saldo-file-processor-group}
+    max-attempts: ${APP_FILE_PROCESSOR_MAX_ATTEMPTS:3}
+    retry-backoff-seconds: ${APP_FILE_PROCESSOR_RETRY_BACKOFF_SECONDS:5}
 
 management:
   endpoints:

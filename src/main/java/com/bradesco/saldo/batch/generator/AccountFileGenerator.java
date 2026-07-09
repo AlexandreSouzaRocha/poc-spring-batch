@@ -13,9 +13,12 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.stream.IntStream;
 
 import com.bradesco.saldo.batch.model.RecordLayout;
+import com.bradesco.saldo.batch.partition.FileNaming;
 import com.bradesco.saldo.batch.storage.InputStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -26,9 +29,15 @@ public class AccountFileGenerator {
     private static final int BUFFER_SIZE = 1 << 20;
 
     private final InputStore store;
+    private final KafkaTemplate<String, String> kafkaTemplate;
+    private final String fileProcessorTopic;
 
-    public AccountFileGenerator(InputStore store) {
+    public AccountFileGenerator(InputStore store,
+                                KafkaTemplate<String, String> kafkaTemplate,
+                                @Value("${app.file-processor.topic}") String fileProcessorTopic) {
         this.store = store;
+        this.kafkaTemplate = kafkaTemplate;
+        this.fileProcessorTopic = fileProcessorTopic;
     }
 
     public record GenerationResult(int files, long totalLines, int recordLength,
@@ -42,13 +51,15 @@ public class AccountFileGenerator {
         byte[] header = (RecordLayout.PREFIX + date + RecordLayout.TIMESTAMP_LITERAL)
                 .getBytes(StandardCharsets.US_ASCII);
 
+        String timestamp = Long.toString(System.currentTimeMillis());
+
         long start = System.currentTimeMillis();
         int threads = Math.min(DIGITS, Math.max(1, Runtime.getRuntime().availableProcessors()));
         ExecutorService executor = Executors.newFixedThreadPool(threads);
         try {
             var futures = IntStream.range(0, DIGITS)
                     .<Future<?>>mapToObj(digit -> executor.submit(
-                            () -> writeDigitFile(digit, linesPerDigit, header, length)))
+                            () -> writeDigitFile(digit, linesPerDigit, header, length, timestamp)))
                     .toList();
             for (Future<?> future : futures) {
                 future.get();
@@ -70,8 +81,8 @@ public class AccountFileGenerator {
         return new GenerationResult(DIGITS, total, length, storage, elapsed);
     }
 
-    private void writeDigitFile(int digit, long linesPerDigit, byte[] header, int length) {
-        String name = "part_" + digit + ".dat";
+    private void writeDigitFile(int digit, long linesPerDigit, byte[] header, int length, String timestamp) {
+        String name = FileNaming.fileNameForDigit(timestamp, digit);
         int fillerLength = length - RecordLayout.MEANINGFUL_LENGTH;
         ThreadLocalRandom rnd = ThreadLocalRandom.current();
         byte[] line = new byte[length + 1];
@@ -86,6 +97,7 @@ public class AccountFileGenerator {
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
+        kafkaTemplate.send(fileProcessorTopic, digit, name, name);
     }
 
     private void buildLine(byte[] line, byte[] header, byte[] filler, ThreadLocalRandom rnd,

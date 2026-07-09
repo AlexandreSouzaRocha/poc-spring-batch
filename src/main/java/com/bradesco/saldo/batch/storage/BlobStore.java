@@ -15,6 +15,7 @@ import com.azure.storage.blob.options.BlobInputStreamOptions;
 public class BlobStore implements InputStore {
 
     private static final int READ_BLOCK_SIZE = 1 << 22;
+    private static final String ERROR_PREFIX = "errors/";
 
     private final BlobContainerClient container;
 
@@ -25,7 +26,7 @@ public class BlobStore implements InputStore {
     @Override
     public List<StoredFile> listDataFiles() {
         return container.listBlobs().stream()
-                .filter(b -> b.getName().endsWith(".dat"))
+                .filter(b -> b.getName().endsWith(".dat") && !b.getName().startsWith(ERROR_PREFIX))
                 .map(b -> new StoredFile(b.getName(), b.getProperties().getContentLength()))
                 .toList();
     }
@@ -38,12 +39,6 @@ public class BlobStore implements InputStore {
                         .setBlockSize(READ_BLOCK_SIZE));
     }
 
-    /**
-     * Grava em um arquivo temporário local e envia via {@code uploadFromFile} no
-     * {@code close()}: o SDK faz upload em blocos direto do disco (streaming real,
-     * sem acumular o arquivo inteiro em heap) — mais robusto que escrever direto num
-     * {@code BlobOutputStream} para arquivos grandes.
-     */
     @Override
     public OutputStream create(String name) throws IOException {
         Path tempFile = Files.createTempFile("blob-upload-", ".tmp");
@@ -69,5 +64,19 @@ public class BlobStore implements InputStore {
                 }
             }
         };
+    }
+
+    @Override
+    public void moveToErrorFolder(String name) throws IOException {
+        Path tempFile = Files.createTempFile("blob-error-move-", ".tmp");
+        try {
+            try (InputStream in = openAt(name, 0); OutputStream out = Files.newOutputStream(tempFile)) {
+                in.transferTo(out);
+            }
+            container.getBlobClient(ERROR_PREFIX + name).uploadFromFile(tempFile.toString(), true);
+            container.getBlobClient(name).deleteIfExists();
+        } finally {
+            Files.deleteIfExists(tempFile);
+        }
     }
 }

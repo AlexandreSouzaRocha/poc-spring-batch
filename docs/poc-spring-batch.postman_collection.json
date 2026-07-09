@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "POC Spring Batch → Kafka",
-    "description": "Endpoints da POC: gerar a massa de teste (Azure Blob/Azurite ou disco local) e disparar o batch (fire-and-forget). app-1 (dígitos 0-4) em :8081, app-2 (dígitos 5-9) em :8082 (o kafka-ui usa a 8080).",
+    "description": "Fluxo primário: gerar arquivo (POST /data/generate) publica evento no tópico saldo-file-processor, que dispara o processamento sozinho (consumer group, ack só após concluir). Os endpoints /batch/trigger* são reprocessamento manual/ad-hoc. app-1 em :8081, app-2 em :8082 (kafka-ui na 8080).",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -19,11 +19,16 @@
       "key": "run",
       "value": "poc",
       "type": "string"
+    },
+    {
+      "key": "file",
+      "value": "1720471234567_part_0.dat",
+      "type": "string"
     }
   ],
   "item": [
     {
-      "name": "Gerar arquivo de teste (via app-1)",
+      "name": "Gerar arquivo de teste (dispara o processamento sozinho)",
       "request": {
         "method": "POST",
         "header": [],
@@ -50,12 +55,12 @@
             }
           ]
         },
-        "description": "Gera os 10 arquivos part_0.dat..part_9.dat (um por dígito verificador) no storage configurado (blob ou disco — ver APP_STORAGE). Como o storage é compartilhado entre app-1 e app-2, basta chamar em um dos dois. Síncrono: retorna { files, totalLines, recordLength, storage, elapsedMs }."
+        "description": "Gera os 10 arquivos <timestamp>_part_0.dat..part_9.dat (um por dígito verificador) no storage configurado (blob ou disco) e publica um evento por arquivo no tópico saldo-file-processor — app-1/app-2 processam sozinhos, sem precisar chamar /batch/trigger. Síncrono: retorna { files, totalLines, recordLength, storage, elapsedMs }."
       },
       "response": []
     },
     {
-      "name": "Disparar batch — app-1 (dígitos 0-4)",
+      "name": "[Manual] Disparar batch — app-1 (todos os arquivos alcançáveis)",
       "request": {
         "method": "POST",
         "header": [],
@@ -71,12 +76,12 @@
             }
           ]
         },
-        "description": "Dispara o saldoBatchJob (partições dos dígitos 0-4) em background e responde 202 imediatamente."
+        "description": "Reprocessamento manual/ad-hoc: dispara o saldoBatchJob em background e responde 202. O fluxo automático é via evento (Kafka); este endpoint não é necessário no dia a dia."
       },
       "response": []
     },
     {
-      "name": "Disparar batch — app-2 (dígitos 5-9)",
+      "name": "[Manual] Disparar batch — app-2",
       "request": {
         "method": "POST",
         "header": [],
@@ -92,7 +97,28 @@
             }
           ]
         },
-        "description": "Dispara o saldoBatchJob (partições dos dígitos 5-9) em background e responde 202 imediatamente."
+        "description": "Reprocessamento manual/ad-hoc via app-2."
+      },
+      "response": []
+    },
+    {
+      "name": "[Manual] Reprocessar um arquivo específico",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "url": {
+          "raw": "{{app1Url}}/batch/trigger-file?file={{file}}",
+          "host": ["{{app1Url}}"],
+          "path": ["batch", "trigger-file"],
+          "query": [
+            {
+              "key": "file",
+              "value": "{{file}}",
+              "description": "Nome exato do arquivo no storage (ex.: 1720471234567_part_3.dat)."
+            }
+          ]
+        },
+        "description": "Reprocessa um único arquivo usando o mesmo saldoFileJob do consumer do Kafka. Útil para reprocessar manualmente um arquivo que caiu no DLQ (depois de corrigir a causa raiz)."
       },
       "response": []
     },

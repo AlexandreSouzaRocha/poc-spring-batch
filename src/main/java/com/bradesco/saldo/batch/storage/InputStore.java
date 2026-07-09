@@ -15,4 +15,6 @@ public interface InputStore {
     InputStream openAt(String name, long offset) throws IOException;
 
     OutputStream create(String name) throws IOException;
+
+    void moveToErrorFolder(String name) throws IOException;
 }

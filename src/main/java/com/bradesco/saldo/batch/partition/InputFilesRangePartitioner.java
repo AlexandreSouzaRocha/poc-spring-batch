@@ -6,8 +6,7 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
+import java.util.function.Predicate;
 
 import com.bradesco.saldo.batch.storage.InputStore;
 import com.bradesco.saldo.batch.storage.InputStore.StoredFile;
@@ -17,22 +16,33 @@ import org.springframework.batch.infrastructure.item.ExecutionContext;
 
 public class InputFilesRangePartitioner implements Partitioner {
 
-    private static final Pattern DIGIT_FILE = Pattern.compile("part_(\\d)\\.dat");
-
     private final InputStore store;
     private final int partitionsPerFile;
-    private final int digitFrom;
-    private final int digitTo;
+    private final Predicate<String> fileFilter;
+    private final String filterDescription;
 
     public InputFilesRangePartitioner(InputStore store, int partitionsPerFile) {
         this(store, partitionsPerFile, 0, 9);
     }
 
     public InputFilesRangePartitioner(InputStore store, int partitionsPerFile, int digitFrom, int digitTo) {
+        this(store, partitionsPerFile,
+                name -> FileNaming.matches(name) && FileNaming.extractDigit(name) >= digitFrom
+                        && FileNaming.extractDigit(name) <= digitTo,
+                "dígitos [" + digitFrom + "-" + digitTo + "]");
+    }
+
+    public static InputFilesRangePartitioner forSingleFile(InputStore store, int partitionsPerFile, String fileName) {
+        return new InputFilesRangePartitioner(store, partitionsPerFile,
+                fileName::equals, "arquivo '" + fileName + "'");
+    }
+
+    private InputFilesRangePartitioner(InputStore store, int partitionsPerFile,
+                                       Predicate<String> fileFilter, String filterDescription) {
         this.store = store;
         this.partitionsPerFile = Math.max(1, partitionsPerFile);
-        this.digitFrom = digitFrom;
-        this.digitTo = digitTo;
+        this.fileFilter = fileFilter;
+        this.filterDescription = filterDescription;
     }
 
     @Override
@@ -40,15 +50,14 @@ public class InputFilesRangePartitioner implements Partitioner {
         List<StoredFile> files;
         try {
             files = store.listDataFiles().stream()
-                    .filter(f -> matchesShard(f.name()))
+                    .filter(f -> fileFilter.test(f.name()))
                     .sorted(Comparator.comparing(StoredFile::name))
                     .toList();
         } catch (IOException e) {
             throw new UncheckedIOException("Falha ao listar arquivos de entrada", e);
         }
         if (files.isEmpty()) {
-            throw new IllegalStateException("Nenhum arquivo *.dat encontrado no storage"
-                    + " para o intervalo de dígitos [" + digitFrom + "-" + digitTo + "]");
+            throw new IllegalStateException("Nenhum arquivo *.dat encontrado no storage para " + filterDescription);
         }
 
         Map<String, ExecutionContext> partitions = new HashMap<>();
@@ -73,14 +82,5 @@ public class InputFilesRangePartitioner implements Partitioner {
             }
         }
         return partitions;
-    }
-
-    private boolean matchesShard(String fileName) {
-        Matcher matcher = DIGIT_FILE.matcher(fileName);
-        if (!matcher.matches()) {
-            return false;
-        }
-        int digit = Integer.parseInt(matcher.group(1));
-        return digit >= digitFrom && digit <= digitTo;
     }
 }

@@ -29,7 +29,7 @@ class ByteRangeLineReaderTest {
             expected.add(line);
             content.append(line).append('\n');
         }
-        Files.writeString(dir.resolve("part_0.dat"), content.toString(), StandardCharsets.UTF_8);
+        Files.writeString(dir.resolve("1720471234567_part_0.dat"), content.toString(), StandardCharsets.UTF_8);
 
         LocalFileStore store = new LocalFileStore(dir.toString());
         int partitionsPerFile = 8;
