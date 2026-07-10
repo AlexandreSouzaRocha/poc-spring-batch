@@ -83,16 +83,16 @@ flowchart LR
 
 Cada mensagem consumida = **1 arquivo** = **1 execução do `saldoFileJob`**, síncrona: o
 consumer só faz `ack` no Kafka depois que o job termina com `COMPLETED`
-([FileProcessorConsumer](../src/main/java/com/bradesco/saldo/batch/consumer/FileProcessorConsumer.java)).
+([FileProcessorConsumer](../src/main/java/br/com/saldo/batch/consumer/FileProcessorConsumer.java)).
 
 | Etapa | Classe real | Comportamento de resiliência |
 |---|---|---|
-| **masterStep** | `fileMasterStep` (bean em [BatchConfig](../src/main/java/com/bradesco/saldo/batch/config/BatchConfig.java)) | Orquestra 1 arquivo por execução do job |
-| **Partitioner** | [InputFilesRangePartitioner](../src/main/java/com/bradesco/saldo/batch/partition/InputFilesRangePartitioner.java) | Divide o arquivo em N faixas de byte-offset (`partitions-per-file`) |
+| **masterStep** | `fileMasterStep` (bean em [BatchConfig](../src/main/java/br/com/saldo/batch/config/BatchConfig.java)) | Orquestra 1 arquivo por execução do job |
+| **Partitioner** | [InputFilesRangePartitioner](../src/main/java/br/com/saldo/batch/partition/InputFilesRangePartitioner.java) | Divide o arquivo em N faixas de byte-offset (`partitions-per-file`) |
 | **workerStep** | bean `workerStep` | `chunk=5000` · fault-tolerant · retenta erro transiente do Kafka (3×) |
-| **Reader** | [ByteRangeLineReader](../src/main/java/com/bradesco/saldo/batch/reader/ByteRangeLineReader.java) | Salva a posição lida no `ExecutionContext` → **retoma do byte exato** se o processo parar no meio |
-| **LineProcessor** | [LineProcessor](../src/main/java/com/bradesco/saldo/batch/processor/LineProcessor.java) | Extrai agência+conta por offset fixo → monta a key `AAAA-CCCCCCC` |
-| **KafkaWriter** | [KafkaLineWriter](../src/main/java/com/bradesco/saldo/batch/writer/KafkaLineWriter.java) | `flush()` por chunk antes do commit → durabilidade, at-least-once |
+| **Reader** | [ByteRangeLineReader](../src/main/java/br/com/saldo/batch/reader/ByteRangeLineReader.java) | Salva a posição lida no `ExecutionContext` → **retoma do byte exato** se o processo parar no meio |
+| **LineProcessor** | [LineProcessor](../src/main/java/br/com/saldo/batch/processor/LineProcessor.java) | Extrai agência+conta por offset fixo → monta a key `AAAA-CCCCCCC` |
+| **KafkaWriter** | [KafkaLineWriter](../src/main/java/br/com/saldo/batch/writer/KafkaLineWriter.java) | `flush()` por chunk antes do commit → durabilidade, at-least-once |
 
 ### Identidade do job e retomada
 

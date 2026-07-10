@@ -76,4 +76,4 @@ management:
 logging:
   level:
     org.springframework.batch: INFO
-    com.bradesco.saldo.batch: INFO
+    br.com.saldo.batch: INFO
