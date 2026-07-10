@@ -33,13 +33,22 @@ Cada container com **1 CPU / 2GiB memória** (limit), `partitions-per-file=8`,
 CPU dedicada separada dos containers de app. Volume dividido igualmente entre os 10
 arquivos (ex.: 30MM = 3MM linhas/arquivo).
 
-| Volume total | Tempo de processamento | Throughput agregado | Resultado |
-|---:|---:|---:|:--|
-| 1MM | 21.1s | ~47.400 registros/s | 10/10, 0 erros |
-| 5MM | 37.2s | ~134.500 registros/s | 10/10, 0 erros |
-| 10MM | 61.0s | ~164.000 registros/s | 10/10, 0 erros |
-| 20MM | 88.7s | ~225.600 registros/s | 10/10, 0 erros |
-| 30MM | 103.4s | ~290.200 registros/s | 10/10, 0 erros |
+| Volume total | chunk-size | Tempo de processamento | Throughput agregado | Resultado |
+|---:|---:|---:|---:|:--|
+| 1MM | 5000 | 21.1s | ~47.400 registros/s | 10/10, 0 erros |
+| 5MM | 5000 | 37.2s | ~134.500 registros/s | 10/10, 0 erros |
+| 10MM | 5000 | 61.0s | ~164.000 registros/s | 10/10, 0 erros |
+| 20MM | 5000 | 88.7s | ~225.600 registros/s | 10/10, 0 erros |
+| 30MM | 5000 | 103.4s | ~290.200 registros/s | 10/10, 0 erros |
+| 100MM | 10000 | 331.7s (~5.5min) | ~301.500 registros/s | 10/10, 0 erros |
+
+A linha de 100MM usa `chunk-size=10000` (mudou de 5000 durante a investigação do
+timeout de transação do Mongo em volumes maiores — ver seção de 200MM abaixo) e
+`RoundRobinAssignor` já aplicado; não é uma comparação direta 1:1 com as linhas
+anteriores. Importante: **100MM com a topologia real de 10 containers completou sem
+esbarrar no teto do Kafka single-broker** que derrubou o teste de 200MM/10-containers
+(ver nota de limitações abaixo) — indicando que o teto fica entre 100MM e 200MM nesta
+configuração local.
 
 Throughput cresce com o volume porque custos fixos (restart dos containers,
 rebalance do consumer group, warm-up) são amortizados sobre mais dados — o comportamento

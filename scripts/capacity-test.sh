@@ -107,9 +107,12 @@ done
 t1_ms=$(python3 -c 'import time; print(int(time.time()*1000))')
 
 processing_elapsed_ms=$((t1_ms - generate_done_ms))
+if [ "$processing_elapsed_ms" -le 0 ]; then
+  processing_elapsed_ms=1
+fi
 total_elapsed_ms=$((t1_ms - t0_ms))
 total_elapsed_sec=$(echo "scale=2; ${total_elapsed_ms}/1000" | bc)
-tps=$(echo "scale=0; ${TOTAL_RECORDS}/(${processing_elapsed_ms}/1000)" | bc)
+tps=$(echo "scale=0; (${TOTAL_RECORDS} * 1000)/${processing_elapsed_ms}" | bc)
 tps_per_container=$(echo "scale=0; ${tps}/3" | bc)
 
 echo "arquivos concluídos: ${completed}/3 (críticos/órfãos: ${errors:-0})"

@@ -94,18 +94,26 @@ done
 t1_ms=$(python3 -c 'import time; print(int(time.time()*1000))')
 
 processing_elapsed_ms=$((t1_ms - generate_done_ms))
+if [ "$processing_elapsed_ms" -le 0 ]; then
+  processing_elapsed_ms=1
+fi
 total_elapsed_ms=$((t1_ms - t0_ms))
+if [ "$total_elapsed_ms" -le 0 ]; then
+  total_elapsed_ms=1
+fi
 total_elapsed_sec=$(echo "scale=2; ${total_elapsed_ms}/1000" | bc)
-tps=$(echo "scale=0; ${TOTAL_RECORDS}/(${total_elapsed_ms}/1000)" | bc)
+tps=$(echo "scale=0; (${TOTAL_RECORDS} * 1000)/${total_elapsed_ms}" | bc)
+processing_tps=$(echo "scale=0; (${TOTAL_RECORDS} * 1000)/${processing_elapsed_ms}" | bc)
 
 echo "arquivos concluídos: ${completed}/10 (críticos/órfãos: ${errors:-0})"
 echo "tempo geração: $((gen_elapsed_ms))ms"
 echo "tempo processamento (evento->conclusão): $((processing_elapsed_ms))ms"
 echo "tempo total: ${total_elapsed_sec}s"
-echo "throughput agregado: ${tps} registros/s"
+echo "throughput agregado (total, inclui geração): ${tps} registros/s"
+echo "throughput de processamento (só evento->conclusão): ${processing_tps} registros/s"
 
 if [ "$completed" -lt 10 ]; then
   echo "AVISO: timeout atingido antes de concluir os 10 arquivos"
 fi
 
-echo "=== RESULT total_records=${TOTAL_RECORDS} record_length=${RECORD_LENGTH} gen_ms=${gen_elapsed_ms} processing_ms=${processing_elapsed_ms} total_ms=${total_elapsed_ms} tps=${tps} completed=${completed} ==="
+echo "=== RESULT total_records=${TOTAL_RECORDS} record_length=${RECORD_LENGTH} gen_ms=${gen_elapsed_ms} processing_ms=${processing_elapsed_ms} total_ms=${total_elapsed_ms} tps=${tps} processing_tps=${processing_tps} completed=${completed} ==="

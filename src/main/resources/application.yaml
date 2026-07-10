@@ -34,10 +34,6 @@ spring:
         max.poll.interval.ms: 1800000
         # member-id fixo por container: evita rebalance desnecessário em restart rápido
         group.instance.id: ${APP_CONSUMER_INSTANCE_ID:${HOSTNAME:local-instance}}
-        # round-robin em vez do range default: com menos consumers que partições (ex.: teste de
-        # capacidade com 3 containers/10 partições), o range assignor dá faixas contíguas e pode
-        # concentrar todo o tráfego real (dígitos 0,1,2) num único consumer; round-robin distribui
-        # ciclicamente partição a partição, garantindo 1 dígito real por container ativo
         partition.assignment.strategy: org.apache.kafka.clients.consumer.RoundRobinAssignor
     listener:
       ack-mode: manual_immediate
