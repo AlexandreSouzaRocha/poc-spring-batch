@@ -101,8 +101,8 @@ services:
       APP_BLOB_ACCOUNT_NAME: devstoreaccount1
       APP_BLOB_ACCOUNT_KEY: "Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw=="
       APP_BLOB_CONTAINER: saldo-files
-      APP_CHUNK_SIZE: 5000
-      APP_PARTITIONS_PER_FILE: 8
+      APP_CHUNK_SIZE: 10000
+      APP_PARTITIONS_PER_FILE: 10
       JAVA_TOOL_OPTIONS: "-Djdk.tracePinnedThreads=full -XX:MaxRAMPercentage=50.0 -XX:InitialRAMPercentage=30.0 --sun-misc-unsafe-memory-access=allow"
     depends_on: &app-depends
       kafka:

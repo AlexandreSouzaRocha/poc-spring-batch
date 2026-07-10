@@ -136,3 +136,90 @@ esbarrou no teto local de Kafka/disco — ver nota abaixo).
 Reproduzir: `./scripts/capacity-test.sh <linesPerFile> [recordLength] [timeoutSeconds] [coresPerContainer]`.
 Após rodar, sempre conferir `docker compose logs app-1 app-2 app-3 | grep "partitions assigned"`
 para confirmar que os dígitos ativos caíram em containers diferentes antes de aceitar o resultado.
+
+## Cenário 3 — matriz partitions-per-file × chunk-size (8 vs 10, 5000 vs 10000)
+
+Motivação: os Cenários 1 e 2 fixavam `partitions-per-file=8` e `chunk-size=5000` como
+"o valor bom" com base em testes pontuais. Para confirmar que essa era mesmo a melhor
+combinação (e não só a primeira que funcionou), rodamos as **4 combinações**
+(`partitions-per-file` ∈ {8, 10} × `chunk-size` ∈ {5000, 10000}) contra os **mesmos
+volumes** dos Cenários 1 e 2 — 32 execuções no total. Reproduzir com
+`./scripts/run-matrix-resume.sh` (reexecuta só o que falta, pulando combinações já
+concluídas — útil porque essa bateria é longa e sobreviveu a duas quedas de disco/Docker
+Desktop no meio do caminho, narradas abaixo).
+
+> ⚠️ São execuções **únicas** por combinação (sem repetição/média), então há ruído
+> normal de medição — principalmente nos volumes pequenos (1MM), onde custos fixos
+> (restart, rebalance) dominam o tempo total. Trate diferenças pequenas (<15%) como
+> dentro da margem de ruído; as diferenças grandes reportadas abaixo são consistentes
+> o suficiente para embasar uma recomendação.
+
+### 10 containers (1 CPU/container — topologia real)
+
+Throughput de processamento (registros/s) por volume:
+
+| Volume | p8/c5000 | p8/c10000 | p10/c5000 | p10/c10000 |
+|---:|---:|---:|---:|---:|
+| 1MM | 87.443 | 87.191 | 44.033 | 44.377 |
+| 5MM | 213.438 | 167.123 | 125.650 | 153.515 |
+| 10MM | 242.694 | 303.637 | 216.379 | 248.268 |
+| 20MM | 302.425 | 377.943 | 290.723 | 366.105 |
+| 100MM | 262.034 | 252.681 | 221.837 | 257.761 |
+| **Média** | **221.607** | **237.715** | **179.724** | **214.005** |
+
+### 3 containers (3 CPU/container — teste de capacidade)
+
+Throughput por container (registros/s) por volume total:
+
+| Volume total | p8/c5000 | p8/c10000 | p10/c5000 | p10/c10000 |
+|---:|---:|---:|---:|---:|
+| 18MM | 113.533 | 176.912 | 143.757 | 194.912 |
+| 60MM | 148.877 | 177.014 | 140.940 | 186.614 |
+| 200MM | 98.205 | 104.461 | 101.742 | 124.073 |
+| **Média** | **120.205** | **152.796** | **128.813** | **168.533** |
+
+### Conclusão: a resposta depende de quanta CPU o container tem
+
+**Com 1 CPU/container (topologia real de produção)**: `partitions-per-file=8` vence
+`=10` de forma consistente e, no volume pequeno (1MM), por uma margem enorme (quase
+2x) — mais partições que CPU disponível só adiciona troca de contexto sem ganho real
+(já diagnosticado antes nesta sessão). `chunk-size` é um empate técnico entre 5000 e
+10000 (a média favorece levemente 10000, mas a vantagem troca de lado dependendo do
+volume — dentro do ruído de medição). **A intuição original do usuário
+(`partitions-per-file=8`) se confirma como a melhor escolha para 1 CPU/container**;
+`chunk-size=5000` continua uma escolha segura, mas `10000` não é pior de forma
+relevante.
+
+**Com 3 CPUs/container (teste de capacidade)**: o resultado inverte —
+`partitions-per-file=10` vence `=8` em toda a tabela, e `chunk-size=10000` vence
+`5000` em toda a tabela, sem exceção. Faz sentido: mais CPU disponível permite
+aproveitar mais partições em paralelo sem sobrecarregar o container, e chunks maiores
+reduzem a frequência de escrita de metadados no MongoDB (menos overhead
+transacional por registro processado). **`partitions-per-file=10, chunk-size=10000`
+é a melhor combinação testada quando o container tem 3 CPUs.**
+
+**Implicação prática**: o valor ideal de `partitions-per-file`/`chunk-size` não é uma
+constante da aplicação — é uma função da CPU disponível por container/pod. Se o
+dimensionamento real de produção no Kubernetes alocar mais de 1 CPU por pod, vale
+reconsiderar esses dois parâmetros para cima (10/10000) em vez de manter o default
+atual (8/5000) tunado para o cenário mais restrito (1 CPU) deste laboratório.
+
+### Duas quedas de infraestrutura durante essa bateria (não relacionadas à aplicação)
+
+1. **Esgotamento de disco recorrente**: com 32 execuções sequenciais gerando/limpando
+   dezenas de GB cada, o disco da VM do Docker Desktop encheu (>95%) por duas vezes,
+   mesmo após o aumento para 256GB. Na segunda vez, isso causou `input/output error`
+   real no `containerd` (corrupção do disco virtual, não só "sem espaço") — precisou
+   de um quit+reopen completo do Docker Desktop para remontar o disco, seguido de
+   `docker container prune -f` + `docker volume prune -f` (liberou ~52GB de
+   containers parados e ~150GB de volumes órfãos numa única limpeza). A partir daí,
+   `scripts/run-matrix-resume.sh` ganhou uma checagem automática de disco
+   (`check_disk`, roda antes de cada teste, limpa sozinho acima de 70% de uso) para
+   não depender de intervenção manual.
+2. Nenhuma das quedas indicou um problema na aplicação ou no `saldoFileJob` — os
+   `RESULT` de cada combinação, quando completam, mostram sempre `completed=10`/`3`
+   e 0 erros críticos.
+
+Reproduzir a matriz completa (ou retomar de onde parou): `./scripts/run-matrix-resume.sh`.
+Resultados individuais ficam em `/tmp/matrix/*.log`; o script pula automaticamente
+qualquer combinação cujo log já tenha uma linha `=== RESULT`.
