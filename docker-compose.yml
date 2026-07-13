@@ -103,7 +103,7 @@ services:
       APP_BLOB_CONTAINER: saldo-files
       APP_CHUNK_SIZE: 5000
       APP_PARTITIONS_PER_FILE: 8
-      JAVA_TOOL_OPTIONS: "-Djdk.tracePinnedThreads=full -XX:MaxRAMPercentage=50.0 -XX:InitialRAMPercentage=30.0 --sun-misc-unsafe-memory-access=allow"
+      JAVA_TOOL_OPTIONS: "-Djdk.tracePinnedThreads=full -XX:MaxRAMPercentage=50.0 -XX:InitialRAMPercentage=30.0 -XX:+PrintCommandLineFlags --sun-misc-unsafe-memory-access=allow"
     depends_on: &app-depends
       kafka:
         condition: service_healthy
