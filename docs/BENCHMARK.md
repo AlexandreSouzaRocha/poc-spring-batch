@@ -223,3 +223,65 @@ atual (8/5000) tunado para o cenário mais restrito (1 CPU) deste laboratório.
 Reproduzir a matriz completa (ou retomar de onde parou): `./scripts/run-matrix-resume.sh`.
 Resultados individuais ficam em `/tmp/matrix/*.log`; o script pula automaticamente
 qualquer combinação cujo log já tenha uma linha `=== RESULT`.
+
+## Cenário 4 — Coletor de GC: ParallelGC vs G1GC (1 CPU/container)
+
+Motivação: testes em uma máquina com mais recursos (PC da empresa) usando
+`-XX:+UseParallelGC` mostraram pausas de até ~500ms em alto volume. Investigamos o log
+de GC (`-Xlog:gc*:file=/tmp/gc.log`) de um container local (1 CPU/2GiB, `Parallel
+Workers: 1` — com só 1 CPU disponível, o ParallelGC não tem workers extras pra
+paralelizar a coleta, perdendo sua principal vantagem sobre o SerialGC) processando
+100MM registros (`partitions-per-file=8`, `chunk-size=5000`, buffer blob 4MB) e comparamos
+com o mesmo teste usando `-XX:+UseG1GC`.
+
+### Pausas (stop-the-world)
+
+| Métrica | ParallelGC | G1GC |
+|---|---:|---:|
+| Pausas Young — média | 293.8ms | 67.4ms |
+| Pausas Young — máxima | 1196.9ms | 2641.6ms |
+| Full GC — ocorrências | **3** | **0** |
+| Full GC — média / máxima | 3301.8ms / 4489.5ms | — |
+| Tempo total parado (STW) | 73.9s | **35.3s** |
+| Throughput de processamento | ~261.000-262.000 registros/s | ~264.258 registros/s |
+
+O G1GC **eliminou completamente o Full GC** (3 ocorrências de até 4.5s no ParallelGC,
+zero no G1) e **cortou pela metade o tempo total de pausa** (73.9s → 35.3s), mantendo o
+mesmo throughput (diferença de ~1%, dentro do ruído de medição). O único número em que
+o ParallelGC "vence" (pausa Young máxima menor) é enganoso: a pior pausa real do
+ParallelGC não foi uma Young, foi o Full GC de 4.5s — a pior pausa **geral** do G1
+(2.6s) já é bem menor que a pior pausa geral do ParallelGC (4.5s).
+
+**Por que isso importa além do número absoluto**: ao longo desta sessão de benchmark,
+o Kafka (broker single-node local) apresentou repetidas instabilidades de coordenador e
+expulsão de consumers por expiração de heartbeat sob carga. Uma pausa de STW de 4.5s é
+exatamente o tipo de evento que pode disparar esse problema em produção (o container
+fica tempo demais sem responder ao heartbeat do consumer group). Reduzir a pior pausa
+de 4.5s para 2.6s reduz esse risco, mesmo sem ganho de throughput.
+
+### Uso de memória (ocupação do heap)
+
+| Métrica | ParallelGC | G1GC |
+|---|---:|---:|
+| Ocupação pós-GC — média | 513M | **180M** (~2.8x menor) |
+| Capacidade do heap — média | 1163M | **495M** (~2.3x menor) |
+| Capacidade do heap — pico máximo | 1374M | 1434M (só em picos pontuais) |
+
+O ParallelGC mantém o heap **cronicamente perto do limite** (média de 1163M de um teto
+de ~1374M) porque a geração antiga acumula lixo entre as coletas Young até estourar num
+Full GC. O G1GC recicla de forma muito mais agressiva e constante — a ocupação pós-GC
+fica baixa e estável (média 180M), e o heap só cresce perto do teto (1434M) em picos
+pontuais, não como estado permanente.
+
+### Conclusão
+
+**G1GC é a escolha certa para este workload em containers de 1 CPU**: mesmo throughput
+que o ParallelGC, mas sem Full GC, metade do tempo total de pausa, pior caso de pausa
+bem menor, e uso de heap significativamente mais eficiente — sem nenhuma contrapartida
+observada. `JAVA_TOOL_OPTIONS` no `docker-compose.yml` já reflete essa escolha
+(`-XX:+UseG1GC`).
+
+Reproduzir: aplicar `-XX:+UseG1GC` (ou `-XX:+UseParallelGC` para comparar) em
+`JAVA_TOOL_OPTIONS`, `docker compose up -d`, rodar `./scripts/benchmark.sh 100000000 260 1200`,
+depois `docker cp poc-app-1:/tmp/gc.log ./gc.log` e analisar as pausas (`grep -oE
+'Pause \w+.*?[0-9.]+ms' gc.log`).
