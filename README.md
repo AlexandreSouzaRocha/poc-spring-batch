@@ -127,6 +127,45 @@ ganho de mais containers é modesto. Sharding escala de forma quase-linear com h
 | `APP_FILE_PROCESSOR_GROUP_ID` | `saldo-file-processor-group` | Consumer group (compartilhado entre containers) |
 | `APP_FILE_PROCESSOR_MAX_ATTEMPTS` | `6` | Tentativas antes de mandar pro DLQ + pasta de erros (aumentado de 3→6 após observar DLQ falso-positivo em cold start sob alta concorrência — ver [benchmark](docs/BENCHMARK.md)) |
 | `APP_FILE_PROCESSOR_RETRY_BACKOFF_SECONDS` | `10` | Espera entre tentativas (nack) |
+| `BATCH_RETENTION_DAYS` | `7` | Retenção do histórico do JobRepository no Mongo (ver [expurgo automático](#expurgo-automático-do-jobrepository)) |
+
+## Expurgo automático do JobRepository
+O histórico do Spring Batch é expurgado pelo **TTL nativo do MongoDB** — sem scheduler
+na aplicação. Índices em `create_time` nas três collections de metadados:
+
+| Collection | Campo do índice TTL |
+|------------|---------------------|
+| `batch_job_instance` | `create_time` |
+| `batch_job_execution` | `create_time` |
+| `batch_step_execution` | `create_time` |
+
+`batch_sequences` fica **de fora de propósito**: é o controle de sequência dos ids,
+apagar documentos de lá quebraria a geração de ids.
+
+O `create_time` é o único campo que o Spring Batch sempre preenche na criação —
+`last_updated` fica nulo entre o insert e o primeiro update, e como **o TTL ignora
+documento cujo campo indexado não seja `Date`**, um container morto nessa janela
+deixaria o registro sem expirar nunca. Como `create_time` cresce de `instance` →
+`job_execution` → `step_execution`, as três expiram nessa ordem e a instance sempre
+sai primeiro. A `batch_job_instance` não tem campo de data no Spring Batch (nem no
+schema JDBC oficial), então o `create_time` é gravado pelo `JobInstanceDocument`.
+
+Localmente é aplicado pelo `mongo-init.sh` no `make up`. Em outros ambientes, o mesmo
+script roda direto via `mongosh`, sem depender do compose:
+
+```bash
+BATCH_RETENTION_DAYS=7 mongosh "mongodb://<host>/<database>" --file docker/mongo-ttl-indexes.js
+```
+
+É idempotente: cria o índice, faz backfill do `create_time` nas instances antigas,
+ajusta a retenção via `collMod` quando o valor muda (um `createIndex` com
+`expireAfterSeconds` diferente falharia com `IndexOptionsConflict`, erro 85) e remove
+índices TTL obsoletos.
+
+> **Primeira ativação com histórico acumulado:** tudo além de X dias expira de uma vez,
+> e o TTL monitor deleta documento a documento — tudo indo pro oplog. Suba com um valor
+> folgado (ex.: `180`) e vá baixando aos poucos para evitar lag de replicação. Em regime
+> permanente a taxa de deleção iguala a de inserção.
 
 ## Resiliência
 **Processamento síncrono com ACK manual**: o consumer (`enable-auto-commit: false`,

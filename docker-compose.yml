@@ -83,7 +83,7 @@ services:
     environment:
       BATCH_RETENTION_DAYS: ${BATCH_RETENTION_DAYS:-7}
     volumes:
-      - ./docker/mongo-init.sh:/init/mongo-init.sh:ro
+      - ./docker:/init:ro
     entrypoint: ["bash", "/init/mongo-init.sh"]
     restart: "no"
 
