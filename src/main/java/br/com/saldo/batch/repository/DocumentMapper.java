@@ -1,5 +1,6 @@
 package br.com.saldo.batch.repository;
 
+import java.time.LocalDateTime;
 import java.util.stream.Collectors;
 
 import br.com.saldo.batch.repository.document.ExecutionContextDocument;
@@ -21,8 +22,9 @@ final class DocumentMapper {
     private DocumentMapper() {
     }
 
-    static JobInstanceDocument toDocument(JobInstance jobInstance) {
-        return new JobInstanceDocument(jobInstance.getJobInstanceId(), jobInstance.getJobName(), jobInstance.getJobKey());
+    static JobInstanceDocument toDocument(JobInstance jobInstance, LocalDateTime createTime) {
+        return new JobInstanceDocument(jobInstance.getJobInstanceId(), jobInstance.getJobName(), jobInstance.getJobKey(),
+                createTime);
     }
 
     static JobInstance fromDocument(JobInstanceDocument document) {

@@ -124,6 +124,9 @@ public class CustomJobExecutionDao implements JobExecutionDao {
         }
         org.springframework.batch.core.repository.persistence.JobExecution jobExecution = DocumentMapper.fromDocument(document);
         JobInstance jobInstance = this.jobInstanceDao.getJobInstance(jobExecution.getJobInstanceId());
+        if (jobInstance == null) {
+            return null;
+        }
         return convert(jobExecution, jobInstance);
     }
 

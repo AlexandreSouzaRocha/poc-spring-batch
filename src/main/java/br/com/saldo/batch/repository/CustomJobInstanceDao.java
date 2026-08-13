@@ -1,5 +1,6 @@
 package br.com.saldo.batch.repository;
 
+import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.List;
 
@@ -60,7 +61,7 @@ public class CustomJobInstanceDao implements JobInstanceDao {
         jobInstanceToSave.setJobKey(key);
         long instanceId = jobInstanceIncrementer.nextLongValue();
         jobInstanceToSave.setJobInstanceId(instanceId);
-        this.mongoOperations.insert(DocumentMapper.toDocument(jobInstanceToSave), COLLECTION_NAME);
+        this.mongoOperations.insert(DocumentMapper.toDocument(jobInstanceToSave, LocalDateTime.now()), COLLECTION_NAME);
 
         JobInstance jobInstance = new JobInstance(instanceId, jobName);
         jobInstance.incrementVersion();
